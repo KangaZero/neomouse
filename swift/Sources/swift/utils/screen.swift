@@ -1,44 +1,35 @@
-import AppKit
+import CoreGraphics
 
-//
-// func getMainScreenSize() -> (width: CGFloat, height: CGFloat)? {
-//     guard let mainScreen = NSScreen.main else {
-//         debug("Could not retrieve main screen in getMainScreenSize")
-//         return nil
-//     }
-//     let width = mainScreen.frame.width
-//     let height = mainScreen.frame.height
-//     return (width, height)
-// }
-
-func getCurrentScreenSize() -> CGSize? {
-    return NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }?.frame.size
+func getActiveDisplays() -> [CGDirectDisplayID] {
+    var count: UInt32 = 0
+    CGGetActiveDisplayList(0, nil, &count)
+    var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+    CGGetActiveDisplayList(count, &displays, &count)
+    return displays
 }
 
-//CGRect(x: -1920, y: 0, width: 3840, height: 1080) for side by side
+func getCurrentScreenSize() -> CGSize? {
+    guard let mouseLoc = CGEvent(source: nil)?.location else { return nil }
+    return getActiveDisplays().first(where: { CGDisplayBounds($0).contains(mouseLoc) }).map {
+        CGDisplayBounds($0).size
+    }
+}
+
 func getAllScreensBoundingRect() -> CGRect {
-    return NSScreen.screens.reduce(CGRect.null) { $0.union($1.frame) }
+    return getActiveDisplays().reduce(CGRect.null) { $0.union(CGDisplayBounds($1)) }
 }
 
 func screenLayouts() {
-    let main = NSScreen.main!.frame
-
-    for screen in NSScreen.screens {
-        let frame = screen.frame
+    let mainBounds = CGDisplayBounds(CGMainDisplayID())
+    for id in getActiveDisplays() {
+        let frame = CGDisplayBounds(id)
         let position: String
-
-        if frame.minX >= main.maxX {
-            position = "right"
-        } else if frame.maxX <= main.minX {
-            position = "left"
-        } else if frame.minY >= main.maxY {
-            position = "above"
-        } else if frame.maxY <= main.minY {
-            position = "below"
-        } else {
-            position = "main"
-        }
-
-        print("\(screen.localizedName): \(position) — \(frame)")
+        // CG coords: y=0 at top of primary, y increases downward
+        if frame.minX >= mainBounds.maxX { position = "right" }
+        else if frame.maxX <= mainBounds.minX { position = "left" }
+        else if frame.maxY <= mainBounds.minY { position = "above" }
+        else if frame.minY >= mainBounds.maxY { position = "below" }
+        else { position = "main" }
+        print("Display \(id): \(position) — \(frame)")
     }
 }

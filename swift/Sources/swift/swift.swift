@@ -58,41 +58,31 @@ struct NeoMouse: App {
             MainActor.assumeIsolated {
                 let _currentCGPoint = getCurrentMouseLocation()
                 let _allScreensBoundingRect = getAllScreensBoundingRect()
-                let _currentNSPoint = NSEvent.mouseLocation
                 let _currentScreenSize = getCurrentScreenSize()
-                let _currentScreen = NSScreen.screens.first(where: {
-                    $0.frame.contains(NSEvent.mouseLocation)
-                })
-                let _primaryScreen = NSScreen.screens.first
+                let _currentDisplayBounds = _currentCGPoint.flatMap { pt in
+                    getActiveDisplays().first(where: { CGDisplayBounds($0).contains(pt) })
+                        .map { CGDisplayBounds($0) }
+                }
                 guard let currentCGPoint = _currentCGPoint,
                     let currentScreenSize = _currentScreenSize,
-                    let currentScreen = _currentScreen,
-                    let primaryScreen = _primaryScreen
+                    let currentDisplayBounds = _currentDisplayBounds
                 else {
                     debug(
                         """
                         [guard fail]
-                          currentNSPoint = \(String(describing: _currentNSPoint))
-                          currentCGPoint  = \(String(describing: _currentCGPoint))
+                          currentCGPoint    = \(String(describing: _currentCGPoint))
                           currentScreenSize = \(String(describing: _currentScreenSize))
-                          currentScreen   = \(String(describing: _currentScreen))
-                          primaryScreen   = \(String(describing: _primaryScreen))
+                          currentDisplay    = \(String(describing: _currentDisplayBounds))
                         """
                     )
                     return
                 }
-                debug(
-                    "allScreensRect: \(String(describing: _allScreensBoundingRect)) NSScreen = \(String(describing: NSScreen.screens))"
-                )
-                // currentCGPoint is in global CG space (top-left of primary = origin).
-                // moveMouseByExactCoordinatesOnCurrentScreen expects screen-local CG coords
-                // (top-left of the *current* screen = origin). On the primary screen these
-                // are identical; on secondary screens the origin offset makes them diverge.
+                debug("allScreensRect: \(String(describing: _allScreensBoundingRect))")
+                // currentCGPoint is global CG space (top-left of primary = origin).
+                // Subtract display origin to get screen-local CG coords.
                 let localCGPoint = CGPoint(
-                    x: currentCGPoint.x - currentScreen.frame.origin.x,
-                    y: currentCGPoint.y
-                        - (primaryScreen.frame.height - currentScreen.frame.origin.y
-                            - currentScreen.frame.height)
+                    x: currentCGPoint.x - currentDisplayBounds.origin.x,
+                    y: currentCGPoint.y - currentDisplayBounds.origin.y
                 )
                 var operationCount: CGFloat = 1
                 if case .normal(let currentPendingNormalOperation) = appState.mode,
@@ -117,7 +107,7 @@ struct NeoMouse: App {
                       mode           = \(appState.mode)
                       cgPoint        = (\(Int(currentCGPoint.x)), \(Int(currentCGPoint.y)))
                       localCGPoint   = (\(Int(localCGPoint.x)), \(Int(localCGPoint.y)))
-                      screen         = \(currentScreen.localizedName)
+                      display        = \(currentDisplayBounds)
                       operationCount = \(operationCount)
                     """
                 )
@@ -443,10 +433,11 @@ struct NeoMouse: App {
                 }
             }
         }
-        NeoMouse.mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { event in
+        NeoMouse.mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { _ in
             MainActor.assumeIsolated {
-                appState.mouseX = NSEvent.mouseLocation.x
-                appState.mouseY = NSEvent.mouseLocation.y
+                guard let loc = getCurrentMouseLocation() else { return }
+                appState.mouseX = loc.x
+                appState.mouseY = loc.y
             }
         }
     }
@@ -624,7 +615,7 @@ final class ToastManager {
         window?.close()
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 60),
+            contentRect: CGRect(x: 0, y: 0, width: 300, height: 60),
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -638,7 +629,7 @@ final class ToastManager {
 
         let x = currentScreen.visibleFrame.maxX - 320
         let y = currentScreen.visibleFrame.minY + 20
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrameOrigin(CGPoint(x: x, y: y))
 
         panel.orderFront(nil)
         window = panel

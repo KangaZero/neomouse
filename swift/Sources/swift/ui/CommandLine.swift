@@ -20,7 +20,7 @@ final class CommandLine {
             )
         }
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 60),
+            contentRect: CGRect(x: 0, y: 0, width: 300, height: 60),
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -34,7 +34,7 @@ final class CommandLine {
 
         let x = currentScreen.visibleFrame.maxX - 320
         let y = currentScreen.visibleFrame.minY + 20
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrameOrigin(CGPoint(x: x, y: y))
 
         panel.orderFront(nil)
         window = panel
