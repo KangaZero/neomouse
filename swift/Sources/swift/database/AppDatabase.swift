@@ -1,185 +1,193 @@
 import Foundation
 import GRDB
-import os.log
 
-/// The type that provides access to the application database.
-///
-/// For example:
-///
-/// ```swift
-/// // Create an empty, in-memory, AppDatabase
-let config = AppDatabase.makeConfiguration()
-// let dbQueue = try DatabaseQueue(configuration: config)
-// let appDatabase = try AppDatabase(dbQueue)
-/// ```
-struct AppDatabase: Sendable {
-    /// Access to the database.
-    ///
-    /// See <https://swiftpackageindex.com/groue/GRDB.swift/documentation/grdb/databaseconnections>
-    private let dbWriter: any DatabaseWriter
-
-    /// Creates a `AppDatabase`, and makes sure the database schema
-    /// is ready.
-    ///
-    /// - important: Create the `DatabaseWriter` with a configuration
-    ///   returned by ``makeConfiguration(_:)``.
-    init(_ dbWriter: any GRDB.DatabaseWriter) throws {
-        self.dbWriter = dbWriter
-        try migrator.migrate(dbWriter)
+let dbPath = FileManager.default.temporaryDirectory.appendingPathComponent("neomouse.sqlite").path
+let dbQueue: DatabaseQueue = {
+    do {
+        return try DatabaseQueue(path: dbPath)
+    } catch {
+        fatalError("Failed to open database at \(dbPath): \(error)")
     }
+}()
 
-    /// The DatabaseMigrator that defines the database schema.
-    ///
-    /// See <https://swiftpackageindex.com/groue/GRDB.swift/documentation/grdb/migrations>
-    private var migrator: DatabaseMigrator {
-        var migrator = DatabaseMigrator()
+enum ModeName: String, Codable, DatabaseValueConvertible {
+    case disabled, normal, find, command
+}
 
-        #if DEBUG
-            // Speed up development by nuking the database when migrations change
-            // See <https://swiftpackageindex.com/groue/GRDB.swift/documentation/grdb/migrations#The-eraseDatabaseOnSchemaChange-Option>
-            migrator.eraseDatabaseOnSchemaChange = true
-        #endif
+enum OperationName: String, Codable, DatabaseValueConvertible {
+    case motionXMinus, motionXPlus, motionYMinus, motionYPlus, motionXMin, motionXMax, motionYMin,
+        motionYMax, motionXMid, motionYMid, clickLeft, clickRight, clickMiddle, scrollUp,
+        scrollDown, scrollLeft, scrollRight
+}
 
-        migrator.registerMigration("createSession") { db in
-            // Create a table
-            // See <https://swiftpackageindex.com/groue/GRDB.swift/documentation/grdb/databaseschema>
+func initializeDB(forceReSeed: Bool) {
+    do {
+        try dbQueue.write { db in
+            let isTablesExist =
+                try db.tableExists("session") && db.tableExists("mark")
+                && db.tableExists("operation")
+            if isTablesExist && !forceReSeed {
+                debug("Tables already exist, skipping initialization.")
+                return
+            }
+            try db.execute(sql: "DROP TABLE IF EXISTS operation")
+            debug("Dropped table 'mark' if it operation.")
+            try db.execute(sql: "DROP TABLE IF EXISTS mark")
+            debug("Dropped table 'mark' if it existed.")
+            try db.execute(sql: "DROP TABLE IF EXISTS session")
+            debug("Dropped table 'session' if it existed.")
+
             try db.create(table: "session") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("name", .text).notNull()
+                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                t.column("updatedAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+            try db.create(table: "mark") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("mark", .text).notNull()
+                t.column("endCGXPoint", .double).notNull()
+                t.column("endCGYPoint", .double).notNull()
+                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                t.belongsTo("session", onDelete: .cascade).notNull()
+            }
+            try db.create(table: "operation") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("isVisual", .boolean).notNull()
+                t.column("startCGXPoint", .double)
+                t.column("startCGYPoint", .double)
+                t.column("endCGXPoint", .double).notNull()
+                t.column("endCGYPoint", .double).notNull()
+                t.column("keysUsed", .text).notNull()
+                t.column("mode", .text).notNull()
+                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                t.belongsTo("session", onDelete: .cascade).notNull()
             }
         }
+    } catch {
+        debug("Initialize DB error: ", error)
 
-        // Migrations for future application versions will be inserted here:
-        // migrator.registerMigration(...) { db in
-        //     ...
-        // }
-
-        return migrator
     }
 }
 
-// MARK: - Database Configuration
-
-extension AppDatabase {
-    // Uncomment for enabling SQL logging
-    private static let sqlLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "SQL")
-
-    /// Returns a database configuration suited for `AppDatabase`.
-    ///
-    /// - parameter config: A base configuration.
-    static func makeConfiguration(_ config: Configuration = Configuration()) -> Configuration {
-        var config = config
-        //
-        // Add custom SQL functions or collations, if needed:
-        // config.prepareDatabase { db in
-        //     db.add(function: ...)
-        // }
-        //
-        // Uncomment for enabling SQL logging if the `SQL_TRACE` environment variable is set.
-        // See <https://swiftpackageindex.com/groue/GRDB.swift/documentation/grdb/database/trace(options:_:)>
-        if ProcessInfo.processInfo.environment["SQL_TRACE"] != nil {
-            config.prepareDatabase { db in
-                let dbName = db.description
-                db.trace { event in
-                    // Sensitive information (statement arguments) is not
-                    // logged unless config.publicStatementArguments is set
-                    // (see below).
-                    sqlLogger.debug("\(dbName): \(event)")
-                }
-            }
+func seedSession() {
+    do {
+        try dbQueue.write { db in
+            var newSession = Session(name: "Seed Session", createdAt: Date(), updatedAt: Date())
+            try newSession.insert(db)
         }
-        //
-        #if DEBUG
-            // Protect sensitive information by enabling verbose debugging in
-            // DEBUG builds only.
-            // See <https://swiftpackageindex.com/groue/GRDB.swift/documentation/grdb/configuration/publicstatementarguments>
-            config.publicStatementArguments = true
-        #endif
-
-        return config
+    } catch {
+        debug("Seed Session error: ", error)
     }
 }
 
-// MARK: - Database Access: Writes
-// The write methods execute invariant-preserving database transactions.
-// In this demo repository, they are pretty simple.
-
-extension AppDatabase {
-    /// Saves (inserts or updates) a player. When the method returns, the
-    /// player is present in the database, and its id is not nil.
-    func savePlayer(_ player: inout Player) throws {
-        try dbWriter.write { db in
-            try player.save(db)
-        }
+func seedMark(numberOfMarks: Int) {
+    let markCharacters: [String] = "0123456789abcdefghijklmnopqrstuvwxyz".map {
+        String($0)
+    }
+    guard numberOfMarks <= markCharacters.count || numberOfMarks <= 0 else {
+        debug("Number of marks to seed exceeds available unique characters: \(markCharacters.count) or is 0 or less: ", numberOfMarks)
+        return
     }
 
-    /// Delete the specified players
-    func deletePlayers(ids: [Int64]) throws {
-        try dbWriter.write { db in
-            _ = try Player.deleteAll(db, keys: ids)
-        }
+    guard let currentScreen = getCurrentScreenSize() else {
+        debug("Could not get current screen size in seedMark")
+        return
     }
-
-    /// Delete all players
-    func deleteAllPlayers() throws {
-        try dbWriter.write { db in
-            _ = try Player.deleteAll(db)
-        }
-    }
-
-    /// Refresh all players (by performing some random changes, for demo purpose).
-    func refreshPlayers() async throws {
-        try await dbWriter.write { db in
-            if try Player.all().isEmpty(db) {
-                // When database is empty, insert new random players
-                try createRandomPlayers(db)
-            } else {
-                // Insert a player
-                if Bool.random() {
-                    _ = try Player.makeRandom().inserted(db)  // insert but ignore inserted id
-                }
-
-                // Delete a random player
-                if Bool.random() {
-                    try Player.order(sql: "RANDOM()").limit(1).deleteAll(db)
-                }
-
-                // Update some players
-                for var player in try Player.fetchAll(db) where Bool.random() {
-                    try player.updateChanges(db) {
-                        $0.score = Player.randomScore()
-                    }
-                }
+    do {
+        try dbQueue.write { db in
+            for i in 0..<numberOfMarks {
+                var newMark = Mark(
+                    mark: markCharacters[i],
+                    endCGXPoint: Double.random(in: 0...currentScreen.width),
+                    endCGYPoint: Double.random(in: 0...currentScreen.height),
+                    createdAt: Date(),
+                    sessionId: 1)
+                try newMark.insert(db)
             }
         }
+    } catch {
+        debug("Seed Mark error: ", error)
     }
 
-    /// Create random players if the database is empty.
-    func createRandomPlayersIfEmpty() throws {
-        try dbWriter.write { db in
-            if try Player.all().isEmpty(db) {
-                try createRandomPlayers(db)
-            }
-        }
+}
+
+struct Session: Codable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "session"
+    var id: Int64?
+    var name: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    static let marks = hasMany(Mark.self)
+    static let operations = hasMany(Operation.self)
+
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let name = Column(CodingKeys.name)
+        static let createdAt = Column(CodingKeys.createdAt)
+        static let updatedAt = Column(CodingKeys.updatedAt)
     }
 
-    /// Support for `createRandomPlayersIfEmpty()` and `refreshPlayers()`.
-    private func createRandomPlayers(_ db: Database) throws {
-        for _ in 0..<8 {
-            _ = try Player.makeRandom().inserted(db)  // insert but ignore inserted id
-        }
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
     }
 }
 
-// MARK: - Database Access: Reads
+struct Mark: Codable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "mark"
+    var id: Int64?
+    var mark: String
+    var endCGXPoint: Double
+    var endCGYPoint: Double
+    var createdAt: Date
+    var sessionId: Int64
 
-// This demo app does not provide any specific reading method, and instead
-// gives an unrestricted read-only access to the rest of the application.
-// In your app, you are free to choose another path, and define focused
-// reading methods.
-extension AppDatabase {
-    /// Provides a read-only access to the database.
-    var reader: any GRDB.DatabaseReader {
-        dbWriter
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let mark = Column(CodingKeys.mark)
+        static let endCGXPoint = Column(CodingKeys.endCGXPoint)
+        static let endCGYPoint = Column(CodingKeys.endCGYPoint)
+        static let createdAt = Column(CodingKeys.createdAt)
+        static let sessionId = Column(CodingKeys.sessionId)
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+struct Operation: Codable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "operation"
+    var id: Int64?
+    var name: OperationName
+    var isVisual: Bool
+    var startCGXPoint: Double?  //INFO: Only exists when isVisual is true, otherwise it's null
+    var startCGYPoint: Double?  //INFO: Only exists when isVisual is true, otherwise it's null
+    var endCGXPoint: Double
+    var endCGYPoint: Double
+    var keysUsed: String  // INFO: 'ggvG', '10j' etc
+    var mode: ModeName  // INFO: 'ggvG', '10j' etc
+    var createdAt: Date
+    var sessionId: Int64
+
+    //INFO: This is needed for compile-time type-safety
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let name = Column(CodingKeys.name)
+        static let isVisual = Column(CodingKeys.isVisual)
+        static let startCGXPoint = Column(CodingKeys.startCGXPoint)
+        static let startCGYPoint = Column(CodingKeys.startCGYPoint)
+        static let endCGXPoint = Column(CodingKeys.endCGXPoint)
+        static let endCGYPoint = Column(CodingKeys.endCGYPoint)
+        static let keysUsed = Column(CodingKeys.keysUsed)
+        static let mode = Column(CodingKeys.mode)
+        static let createdAt = Column(CodingKeys.createdAt)  // or executedAt
+        static let sessionId = Column(CodingKeys.sessionId)
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
     }
 }

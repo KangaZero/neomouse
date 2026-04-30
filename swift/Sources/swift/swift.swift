@@ -51,6 +51,7 @@ struct NeoMouse: App {
         //TODO add checks to make sure no unintended behavior of out of bounds access happens
         // eg.. gridDivisions * gridDivisions <=findModeGridDivisionCharacters.count, and similar for
         // innerGridDivisions
+        initializeDB(forceReSeed: false)
 
         let appState = NeoMouse.sharedState
         NeoMouse.keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
