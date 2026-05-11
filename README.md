@@ -84,3 +84,7 @@ Active development. See [TODO.md](TODO.md) for the roadmap.
 ## Releases
 
 Pre-built binaries are published on the [Releases page](https://github.com/KangaZero/neomouse/releases). To cut a new release, see [RELEASING.md](RELEASING.md).
+
+## License
+
+[MIT](LICENSE). Copyright © 2026 Samuel Wai Weng Yong.
