@@ -10,46 +10,129 @@ The goal is to feel like you never left Vim — mouse control that maps naturall
 
 ## Requirements
 
-| | Minimum | Check with |
-|---|---|---|
-| macOS | 13 (Ventura) | `sw_vers` |
-| Swift toolchain | 6.3 | `swift --version` |
-| bash (release script only) | 3.2 (default on macOS) | `bash --version` |
-| `gh` CLI (release script only) | any | `gh --version` |
+- **macOS 13 (Ventura) or later**
+- **Apple Silicon (arm64).** Intel Macs are not yet supported.
+- **Accessibility permissions** — granted on first run. macOS prompts you; allow `neomouse` in **System Settings → Privacy & Security → Accessibility**, then relaunch.
 
-Accessibility permissions are requested by the app on first run.
+The release binary is ad-hoc signed (not Apple Developer ID signed). The Homebrew and Nix install paths handle this transparently; the manual-download path needs one extra command to clear the Gatekeeper quarantine — see below.
 
-The Swift toolchain and macOS minimums are enforced by `Package.swift` — SwiftPM will refuse to build on older systems with a clear error.
+## Install
 
-## Build
+Pick one. All three install the same v0.0.0 binary from the [Releases page](https://github.com/KangaZero/neomouse/releases).
+
+### 1. Homebrew
 
 ```sh
+brew tap KangaZero/neomouse
+brew install neomouse
+```
+
+Then run:
+
+```sh
+neomouse
+```
+
+Update later with `brew upgrade neomouse`. Uninstall with `brew uninstall neomouse && brew untap KangaZero/neomouse`.
+
+> If your Homebrew is managed declaratively by [`nix-homebrew`](https://github.com/zhaofengli/nix-homebrew), add `github:KangaZero/homebrew-neomouse` as a flake input and put `"neomouse"` in your `homebrew.brews` list. (`brew tap` will not work on a Nix-managed `/opt/homebrew`.)
+
+### 2. Nix
+
+Apple Silicon only. Requires Nix with [flakes enabled](https://nixos.wiki/wiki/Flakes#Enable_flakes_temporarily) (`experimental-features = nix-command flakes` in `~/.config/nix/nix.conf`).
+
+**Try it once without installing anything:**
+
+```sh
+nix run github:KangaZero/neomouse
+```
+
+This downloads the prebuilt binary into your Nix store, runs it, and leaves no trace on next garbage collection.
+
+**Install into your user profile** (puts `neomouse` on your `PATH` permanently):
+
+```sh
+nix profile install github:KangaZero/neomouse
+```
+
+Update later with `nix profile upgrade neomouse`, or `nix profile upgrade --all`. Remove with `nix profile remove neomouse`.
+
+**Add to your system flake** (recommended if you use `nix-darwin`, NixOS, or `home-manager`):
+
+```nix
+# In your existing flake.nix, add the input:
+{
+  inputs.neomouse = {
+    url = "github:KangaZero/neomouse";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, neomouse, ... }: {
+    # ...your existing config...
+  };
+}
+```
+
+Then reference the package wherever you list packages — e.g. inside your nix-darwin module:
+
+```nix
+environment.systemPackages = [
+  neomouse.packages.aarch64-darwin.default
+];
+```
+
+…or inside home-manager:
+
+```nix
+home.packages = [
+  neomouse.packages.aarch64-darwin.default
+];
+```
+
+Rebuild your system (`darwin-rebuild switch --flake .#<host>` or `home-manager switch --flake .#<user>`). Pick up new releases with `nix flake update neomouse` and rebuild.
+
+### 3. Manual (download a tarball)
+
+```sh
+# Pick the latest release URL from https://github.com/KangaZero/neomouse/releases
+VERSION=v0.0.0
+curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neomouse-${VERSION}-macos-arm64.tar.gz"
+curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neomouse-${VERSION}-macos-arm64.tar.gz.sha256"
+
+# Verify the download
+shasum -a 256 -c "neomouse-${VERSION}-macos-arm64.tar.gz.sha256"
+
+# Extract
+tar -xzf "neomouse-${VERSION}-macos-arm64.tar.gz"
+
+# Clear macOS download quarantine (only needed on the manual path)
+xattr -dr com.apple.quarantine ./neomouse
+
+# Run
+./neomouse
+
+# Optional: put it on your PATH
+sudo install -m 755 ./neomouse /usr/local/bin/neomouse
+```
+
+## Build from source
+
+If you'd rather build it yourself instead of using one of the install paths above. Requires Swift 6.3+ (`swift --version`).
+
+```sh
+git clone https://github.com/KangaZero/neomouse
+cd neomouse
+
 # Debug build
 swift build
 
 # Release build
 swift build -c release
-```
 
-The release binary is written to `.build/release/neomouse`.
-
-## Run
-
-```sh
+# Run
 swift run -c release
-# or directly:
+# or
 .build/release/neomouse
-```
-
-> macOS will prompt for Accessibility permissions on first launch. Grant them in **System Settings → Privacy & Security → Accessibility**, then relaunch.
-
-## Install (optional)
-
-Copy the release binary somewhere on your `PATH`:
-
-```sh
-swift build -c release
-cp .build/release/neomouse /usr/local/bin/
 ```
 
 ## Project structure
@@ -80,24 +163,6 @@ This points `core.hooksPath` at `.githooks/`, so the pre-commit hook runs `swift
 ## Status
 
 Active development. See [TODO.md](TODO.md) for the roadmap.
-
-## Install
-
-Three options, in order of friction:
-
-```sh
-# Homebrew (via a personal tap)
-brew tap KangaZero/neomouse
-brew install neomouse
-
-# Nix (flake, runs without installing)
-nix run github:KangaZero/neomouse
-
-# Manual: download the release tarball
-# See the Releases page below.
-```
-
-Apple Silicon only for now.
 
 ## Releases
 
