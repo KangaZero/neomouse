@@ -1,7 +1,24 @@
 import AppKit  // NSWorkspace / NSRunningApplication have no CG equivalent
 
+// Posts a .mouseMoved (or .leftMouseDragged / .rightMouseDragged when a button is held)
+// event whose mouseCursorPosition relocates the cursor as part of dispatch — replaces
+// CGWarpMouseCursorPosition so observers of the event stream (overlay listeners,
+// accessibility tools, target apps) see the move. Suppression interval is zeroed so
+// real HID events from the hardware aren't blocked after a synthesized post.
 func moveMouseByExactGlobalCGPoint(x: CGFloat, y: CGFloat) {
-    CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
+    let point = CGPoint(x: x, y: y)
+    let src = CGEventSource(stateID: .hidSystemState)
+    src?.localEventsSuppressionInterval = 0
+    let leftDown = CGEventSource.buttonState(.hidSystemState, button: .left)
+    let rightDown = CGEventSource.buttonState(.hidSystemState, button: .right)
+    let type: CGEventType =
+        leftDown
+        ? .leftMouseDragged
+        : rightDown ? .rightMouseDragged : .mouseMoved
+    let button: CGMouseButton = leftDown ? .left : rightDown ? .right : .left
+    CGEvent(
+        mouseEventSource: src, mouseType: type, mouseCursorPosition: point, mouseButton: button
+    )?.post(tap: .cghidEventTap)
 }
 
 func moveMouseByExactCoordinatesOnCurrentScreen(x: CGFloat, y: CGFloat) {
@@ -15,7 +32,7 @@ func moveMouseByExactCoordinatesOnCurrentScreen(x: CGFloat, y: CGFloat) {
         return
     }
     let bounds = CGDisplayBounds(display)
-    CGWarpMouseCursorPosition(CGPoint(x: bounds.origin.x + x, y: bounds.origin.y + y))
+    moveMouseByExactGlobalCGPoint(x: bounds.origin.x + x, y: bounds.origin.y + y)
 }
 
 func getCurrentMouseLocation() -> CGPoint? {
@@ -51,7 +68,7 @@ func moveMouseRelatively(x: CGFloat, y: CGFloat, enableClampToCurrentScreen: Boo
         ? max(currentBounds.minY, min(newY, currentBounds.maxY))
         : max(allScreensRect.minY, min(newY, allScreensRect.maxY))
 
-    CGWarpMouseCursorPosition(CGPoint(x: clampedX, y: clampedY))
+    moveMouseByExactGlobalCGPoint(x: clampedX, y: clampedY)
     debug("moveMouseRelatively to x:\(clampedX), y: \(clampedY)")
 }
 
@@ -110,15 +127,6 @@ func mouseClick(_ button: MouseButton, at point: CGPoint) {
     upEvent?.post(tap: .cghidEventTap)
 }
 
-func mouseDown(_button: MouseButton, at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
-    let type: CGEventType = _button == .left ? .leftMouseDown : .rightMouseDown
-    let btn: CGMouseButton = _button == .left ? .left : .right
-    let event = CGEvent(
-        mouseEventSource: src, mouseType: type, mouseCursorPosition: point, mouseButton: btn)
-    event?.post(tap: .cghidEventTap)
-}
-
 func doubleClick(at point: CGPoint) {
     let src = CGEventSource(stateID: .hidSystemState)
     let down = CGEvent(
@@ -134,14 +142,6 @@ func doubleClick(at point: CGPoint) {
     down?.post(tap: .cghidEventTap)
     usleep(8000)
     up?.post(tap: .cghidEventTap)
-}
-
-func moveMouse(to point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
-    let event = CGEvent(
-        mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: point,
-        mouseButton: .left)
-    event?.post(tap: .cghidEventTap)
 }
 
 // MARK: - Mouse Hold / Drag

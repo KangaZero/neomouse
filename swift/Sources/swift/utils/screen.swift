@@ -19,6 +19,18 @@ func getAllScreensBoundingRect() -> CGRect {
     return getActiveDisplays().reduce(CGRect.null) { $0.union(CGDisplayBounds($1)) }
 }
 
+// Flip a CG-space rect (y down, origin = top-left of primary) into AppKit space
+// (y up, origin = bottom-left of primary). NSWindow.setFrame wants AppKit.
+func cgRectToAppKitRect(_ rect: CGRect) -> CGRect {
+    let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height
+    return CGRect(
+        x: rect.origin.x,
+        y: primaryHeight - rect.maxY,
+        width: rect.width,
+        height: rect.height
+    )
+}
+
 func screenLayouts() {
     let mainBounds = CGDisplayBounds(CGMainDisplayID())
     for id in getActiveDisplays() {
