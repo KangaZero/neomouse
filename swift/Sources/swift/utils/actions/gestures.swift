@@ -23,7 +23,7 @@ func pinchZoom(
         safeIncrementsPerGesture = 1
     }
     let step: Double = direction == .in ? min(safeStepValue, 1) : max(-1, -safeStepValue)
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
 
     postGestureEvent(src: src, type: .magnify, value: 0, phase: .began, at: point)
     usleep(8000)
@@ -36,7 +36,7 @@ func pinchZoom(
 }
 
 func smartMagnify(at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     postGestureEvent(src: src, type: .smartMagnify, value: 0, phase: .began, at: point)
     usleep(8000)
     postGestureEvent(src: src, type: .smartMagnify, value: 0, phase: .ended, at: point)
@@ -51,7 +51,7 @@ func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {
         safeIncrementsPerGesture = 1
     }
     let step = degrees
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
 
     postGestureEvent(src: src, type: .rotate, value: 0, phase: .began, at: point)
     usleep(8000)
@@ -63,7 +63,7 @@ func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {
 }
 
 func swipe(_ direction: SwipeDirection, at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
 
     let (dx, dy): (Double, Double) =
         switch direction {

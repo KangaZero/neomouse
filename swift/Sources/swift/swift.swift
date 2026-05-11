@@ -16,6 +16,10 @@ class NeoMouseState: ObservableObject {
     @Published var gridInset: CGFloat = 10
     //TODO Eventually use Session.Operations Table for the below Published var
     @Published var isVisual: Bool = false
+    @Published var previousStartCGXPoint: CGFloat? = nil
+    @Published var previousStartCGYPoint: CGFloat? = nil
+    @Published var previousEndCGXPoint: CGFloat? = nil
+    @Published var previousEndCGYPoint: CGFloat? = nil
     @Published var startCGXPoint: CGFloat? = nil
     @Published var startCGYPoint: CGFloat? = nil
     @Published var endCGXPoint: CGFloat? = nil
@@ -60,6 +64,7 @@ struct NeoMouse: App {
         initializeDB(forceReSeed: false)
 
         let appState = NeoMouse.sharedState
+        // KeyCast.shared.passAppState(state: appState)
         NeoMouse.keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
             MainActor.assumeIsolated {
                 let _currentCGPoint = getCurrentMouseLocation()
@@ -128,13 +133,8 @@ struct NeoMouse: App {
                             event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                                 == .command
                         else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: nil
-                            )
+                            return
                         }
-                        // debug(
-                        //     "modifierFlags:true, modifier: \(event.modifierFlags), mode:\(appState.mode), key:e, keyCode:\(event.keyCode)"
-                        // )
                         appState.mode = .normal(
                             //TODO get session's last mode and pending operation and set to that instead of always resetting to normal mode with no pending operation
                             currentPendingOperation: nil,
@@ -146,19 +146,41 @@ struct NeoMouse: App {
                         return
                     }
                 case .normal(let currentPendingNormalOperation):
+                    switch event.keyCode {
+                    case keyCodeToCharMap["Esc"]:
+                        guard event.modifierFlags.rawValue == 256 else {
+                            break
+                        }
+                        if appState.isVisual {
+                            exitVisualMode(
+                                appState: appState,
+                                visualHighlightOverlay:
+                                    VisualHighlightOverlay.shared)
+                        }
+                        appState.mode = .normal(
+                            currentPendingOperation: nil
+                        )
+                        break
+                    default: break
+                    }
                     switch event.characters {
                     case "e":
                         guard
                             event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                                 == .command
                         else {
+
                             return appState.mode = .normal(
                                 currentPendingOperation: nil
                             )
                         }
-                        // debug(
-                        //     "modifierFlags:true, modifier: \(event.modifierFlags), mode:\(appState.mode), key:e, keyCode:\(event.keyCode)"
-                        // )
+                        //TODO make this into a reusable fn disableNeoMouse
+                        if appState.isVisual {
+                            exitVisualMode(
+                                appState: appState,
+                                visualHighlightOverlay:
+                                    VisualHighlightOverlay.shared)
+                        }
                         appState.mode = .disabled
                         ToastManager.shared.show(
                             "Neomouse Deactivated")
@@ -327,19 +349,57 @@ struct NeoMouse: App {
                                     VisualHighlightOverlay.shared)
                             return
                         }
-                        mouseDown(.left, at: currentCGPoint)
-                        appState.startCGXPoint = currentCGPoint.x
-                        appState.startCGYPoint = currentCGPoint.y
-                        appState.endCGXPoint = currentCGPoint.x
-                        appState.endCGYPoint = currentCGPoint.y
-                        VisualHighlightOverlay.shared.passAppState(state: appState)
+                        if currentPendingNormalOperation == "g"
+                            && appState.previousStartCGXPoint != nil
+                            && appState.previousStartCGYPoint != nil
+                            && appState.previousEndCGXPoint != nil
+                            && appState.previousEndCGYPoint != nil
+                        {
+                            mouseDown(.left, at: currentCGPoint)
+                            appState.startCGXPoint = appState.previousStartCGXPoint
+                            appState.startCGYPoint = appState.previousStartCGYPoint
+                            appState.endCGXPoint = appState.previousEndCGXPoint
+                            appState.endCGYPoint = appState.previousEndCGYPoint
+                            VisualHighlightOverlay.shared.passAppState(state: appState)
+                            moveMouseByExactGlobalCGPoint(
+                                x: appState.previousEndCGXPoint!,
+                                y: appState.previousEndCGYPoint!)
+                            appState.mode = .normal(currentPendingOperation: nil)
+                        } else {
+                            //Go to Visual state
+                            mouseDown(.left, at: currentCGPoint)
+                            appState.startCGXPoint = currentCGPoint.x
+                            appState.startCGYPoint = currentCGPoint.y
+                            appState.endCGXPoint = currentCGPoint.x
+                            appState.endCGYPoint = currentCGPoint.y
+                            VisualHighlightOverlay.shared.passAppState(state: appState)
+                            appState.mode = .normal(currentPendingOperation: nil)
+                        }
+                        break
+                    case "o", "O":
+                        guard appState.isVisual,
+                            let sx = appState.startCGXPoint,
+                            let sy = appState.startCGYPoint,
+                            let ex = appState.endCGXPoint,
+                            let ey = appState.endCGYPoint
+                        else {
+                            return appState.mode = .normal(currentPendingOperation: nil)
+                        }
+                        // Pure anchor↔cursor swap. The mouse monitor is the single source
+                        // of truth for endCG* — after the cursor warp dispatches, it'll
+                        // overwrite endCG* with the cursor's new position (= old start),
+                        // which matches what we set here.
+                        appState.startCGXPoint = ex
+                        appState.startCGYPoint = ey
+                        appState.endCGXPoint = sx
+                        appState.endCGYPoint = sy
+                        moveMouseByExactGlobalCGPoint(x: sx, y: sy)
                         appState.mode = .normal(currentPendingOperation: nil)
                         break
                     case "M":
                         moveMouseByExactCoordinatesOnCurrentScreen(
                             x: localCGPoint.x,
-                            y:
-                                currentScreenSize.height / 2)
+                            y: currentScreenSize.height / 2)
                         appState.mode = .normal(
                             currentPendingOperation: nil
                         )
@@ -454,6 +514,15 @@ struct NeoMouse: App {
                     default: break
                     }
                 case .find:
+                    switch event.keyCode {
+                    case keyCodeToCharMap["Esc"]:
+                        guard event.modifierFlags.rawValue == 256 else {
+                            break
+                        }
+                        NeoMouse.enterNormalMode(appState: appState)
+                        break
+                    default: break
+                    }
                     switch event.characters {
                     case "e":
                         guard
@@ -465,9 +534,12 @@ struct NeoMouse: App {
                                 currentScreenSize:
                                     currentScreenSize)
                         }
-                        // debug(
-                        //     "modifierFlags:true, modifier: \(event.modifierFlags), mode:\(appState.mode), key:e, keyCode:\(event.keyCode)"
-                        // )
+                        if appState.isVisual {
+                            exitVisualMode(
+                                appState: appState,
+                                visualHighlightOverlay:
+                                    VisualHighlightOverlay.shared)
+                        }
                         appState.mode = .disabled
                         GridOverlay.shared.hideGrid()
                         ToastManager.shared.show("NeoMouse Deactivated")
@@ -488,9 +560,6 @@ struct NeoMouse: App {
                     //         NeoMouse.executeFindModeOperation(event: event, appState: appState)
                     //     }
                     //
-                    case "Esc":
-                        NeoMouse.enterNormalMode(appState: appState)
-                        break
                     default:
                         NeoMouse.executeFindModeOperation(
                             event: event, appState: appState, currentScreenSize: currentScreenSize)

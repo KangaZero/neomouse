@@ -1,14 +1,24 @@
 import AppKit  // NSWorkspace / NSRunningApplication have no CG equivalent
 
+// Single factory for every CGEvent we post. Default localEventsSuppressionInterval is
+// 0.25s — after any synthesized post, the system filters real HID events from this
+// source for that window. Designed for pure automation tools that don't want the user's
+// hand fighting a scripted gesture. NeoMouse is a *hybrid* input tool — users mix
+// keyboard-driven moves/gestures with physical mouse fine-tuning — so we zero it and
+// let both input paths interleave at HID-event speed.
+func makeHIDEventSource() -> CGEventSource? {
+    let src = CGEventSource(stateID: .hidSystemState)
+    src?.localEventsSuppressionInterval = 0
+    return src
+}
+
 // Posts a .mouseMoved (or .leftMouseDragged / .rightMouseDragged when a button is held)
 // event whose mouseCursorPosition relocates the cursor as part of dispatch — replaces
 // CGWarpMouseCursorPosition so observers of the event stream (overlay listeners,
-// accessibility tools, target apps) see the move. Suppression interval is zeroed so
-// real HID events from the hardware aren't blocked after a synthesized post.
+// accessibility tools, target apps) see the move.
 func moveMouseByExactGlobalCGPoint(x: CGFloat, y: CGFloat) {
     let point = CGPoint(x: x, y: y)
-    let src = CGEventSource(stateID: .hidSystemState)
-    src?.localEventsSuppressionInterval = 0
+    let src = makeHIDEventSource()
     let leftDown = CGEventSource.buttonState(.hidSystemState, button: .left)
     let rightDown = CGEventSource.buttonState(.hidSystemState, button: .right)
     let type: CGEventType =
@@ -16,6 +26,7 @@ func moveMouseByExactGlobalCGPoint(x: CGFloat, y: CGFloat) {
         ? .leftMouseDragged
         : rightDown ? .rightMouseDragged : .mouseMoved
     let button: CGMouseButton = leftDown ? .left : rightDown ? .right : .left
+    debug("moveMouseByExactGlobalCGPoint to x:\(x), y: \(y), type: \(type), button: \(button)")
     CGEvent(
         mouseEventSource: src, mouseType: type, mouseCursorPosition: point, mouseButton: button
     )?.post(tap: .cghidEventTap)
@@ -33,6 +44,9 @@ func moveMouseByExactCoordinatesOnCurrentScreen(x: CGFloat, y: CGFloat) {
     }
     let bounds = CGDisplayBounds(display)
     moveMouseByExactGlobalCGPoint(x: bounds.origin.x + x, y: bounds.origin.y + y)
+    debug(
+        "moveMouseByExactCoordinatesOnCurrentScreen to x:\(bounds.origin.x + x), y: \(bounds.origin.y + y)"
+    )
 }
 
 func getCurrentMouseLocation() -> CGPoint? {
@@ -112,7 +126,7 @@ enum MouseButton { case left, right }
 // MARK: - Mouse
 
 func mouseClick(_ button: MouseButton, at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     let down: CGEventType = button == .left ? .leftMouseDown : .rightMouseDown
     let up: CGEventType = button == .left ? .leftMouseUp : .rightMouseUp
     let btn: CGMouseButton = button == .left ? .left : .right
@@ -128,7 +142,7 @@ func mouseClick(_ button: MouseButton, at point: CGPoint) {
 }
 
 func doubleClick(at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     let down = CGEvent(
         mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: point,
         mouseButton: .left)
@@ -148,7 +162,7 @@ func doubleClick(at point: CGPoint) {
 
 /// Press and hold the mouse button down (without releasing)
 func mouseDown(_ button: MouseButton, at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     let type: CGEventType = button == .left ? .leftMouseDown : .rightMouseDown
     let btn: CGMouseButton = button == .left ? .left : .right
     let event = CGEvent(
@@ -158,7 +172,7 @@ func mouseDown(_ button: MouseButton, at point: CGPoint) {
 
 /// Release the mouse button
 func mouseUp(_ button: MouseButton, at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     let type: CGEventType = button == .left ? .leftMouseUp : .rightMouseUp
     let btn: CGMouseButton = button == .left ? .left : .right
     let event = CGEvent(
@@ -168,7 +182,7 @@ func mouseUp(_ button: MouseButton, at point: CGPoint) {
 
 /// Drag from one point to another (hold down → move → release)
 func mouseDrag(from start: CGPoint, to end: CGPoint, button: MouseButton = .left, steps: Int = 20) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     let dragType: CGEventType = button == .left ? .leftMouseDragged : .rightMouseDragged
     let btn: CGMouseButton = button == .left ? .left : .right
 
@@ -196,7 +210,7 @@ func mouseDrag(from start: CGPoint, to end: CGPoint, button: MouseButton = .left
 // MARK: - Scroll
 
 func scroll(dx: Int32 = 0, dy: Int32 = 0, at point: CGPoint) {
-    let src = CGEventSource(stateID: .hidSystemState)
+    let src = makeHIDEventSource()
     guard
         let event = CGEvent(
             scrollWheelEvent2Source: src, units: .pixel, wheelCount: 2, wheel1: dy, wheel2: dx,
