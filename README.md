@@ -52,8 +52,10 @@ This downloads the prebuilt binary into your Nix store, runs it, and leaves no t
 **Install into your user profile** (puts `neomouse` on your `PATH` permanently):
 
 ```sh
-nix profile install github:KangaZero/neomouse
+nix profile add github:KangaZero/neomouse
 ```
+
+> On Nix older than 2.20, the subcommand is `nix profile install` instead of `add`. Both still work in recent versions, but `install` is now a deprecated alias.
 
 Update later with `nix profile upgrade neomouse`, or `nix profile upgrade --all`. Remove with `nix profile remove neomouse`.
 
