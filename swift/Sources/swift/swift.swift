@@ -13,19 +13,19 @@ class NeoMouseState: ObservableObject {
     // @Published var isNeomouseMode = false
     // @Published var isFindMode = false
     // @Published var isCommandLineMode = false
-    @Published var mouseX: CGFloat = 0
-    @Published var mouseY: CGFloat = 0
     @Published var gridInset: CGFloat = 10
+    //TODO Eventually use Session.Operations Table for the below Published var
     @Published var isVisual: Bool = false
-    @Published var startingVisualState: VisualState? = nil
-    @Published var endingVisualState: VisualState? = nil
+    @Published var startCGXPoint: CGFloat? = nil
+    @Published var startCGYPoint: CGFloat? = nil
+    @Published var endCGXPoint: CGFloat? = nil
+    @Published var endCGYPoint: CGFloat? = nil
 
     let commands: [String] = ["numbers, relativenumbers"]
     //WARNING: Until a good dynamic solution is found, do not allow these 2 to be mutable, could be a headache as divisionCharacters may
     //need to added in to take in account if gridDivisions increased
     let gridDivisions: Int = 5
     let innerGridDivisions: Int = 3
-
     let findModeGridDivisionCharacters: [String] = "abcdefghijklmnopqrstuvwxyz".map {
         String($0)
     }
@@ -33,8 +33,14 @@ class NeoMouseState: ObservableObject {
         String($0)
     }
     let linesOnScreen: CGFloat = 50
+    let minimumHighlightWidth = 5
     let rangeX: CGFloat = 20
     let rangeY: CGFloat = 20
+
+    // Gesture related settings
+    let zoomStepValue: Double = 0.1  // from 0.01 to 10
+    let incrementsPerGesture: UInt = 5
+    let degreesToRotate: Double = 90
     // let isIgnoresSafeArea = true
     let isAlwaysShowInnerGridCharacters = true
     let isClampCursorToCurrentScreen = false
@@ -111,6 +117,7 @@ struct NeoMouse: App {
                       operationCount = \(operationCount)
                     """
                 )
+                //TODO take in account of other keyboard layouts
                 switch appState.mode {
                 case .disabled:
                     switch event.keyCode {
@@ -250,6 +257,43 @@ struct NeoMouse: App {
                             break
                         }
                         break
+                    case keyCodeToCharMap["v"]:
+                        appState.isVisual.toggle()
+                        guard appState.isVisual else {
+                            appState.startCGXPoint = nil
+                            appState.startCGYPoint = nil
+                            appState.endCGXPoint = nil
+                            appState.endCGYPoint = nil
+                            VisualHighlightOverlay.shared.hideOverlay()
+                            return
+                        }
+                        if event.modifierFlags.contains(.shift) {
+                            let lineHeight = currentScreenSize.height / appState.linesOnScreen
+                            let startCGPoint = CGPoint(x: 0 + appState.gridInset, y: localCGPoint.y)
+                            let endCGPoint = CGPoint(
+                                x: currentScreenSize.width - appState.gridInset,
+                                y: localCGPoint.y + lineHeight)
+                            moveMouseByExactCoordinatesOnCurrentScreen(
+                                x: startCGPoint.x, y: startCGPoint.y)
+                            mouseDown(.left, at: startCGPoint)
+                            moveMouseByExactCoordinatesOnCurrentScreen(
+                                x: endCGPoint.x, y: endCGPoint.y)
+                            appState.startCGXPoint = startCGPoint.x
+                            appState.startCGYPoint = startCGPoint.y
+                            appState.endCGXPoint = endCGPoint.x
+                            appState.endCGYPoint = endCGPoint.y
+                            VisualHighlightOverlay.shared.passAppState(state: appState)
+                            break
+                        }
+                        guard event.modifierFlags.rawValue == 256 else { return }
+
+                        mouseDown(.left, at: CGPoint(x: localCGPoint.x, y: localCGPoint.y))
+                        appState.startCGXPoint = localCGPoint.x
+                        appState.startCGYPoint = localCGPoint.y
+                        appState.endCGXPoint = localCGPoint.x
+                        appState.endCGYPoint = localCGPoint.y
+                        VisualHighlightOverlay.shared.passAppState(state: appState)
+                        break
                     case keyCodeToCharMap["m"]:
                         if event.modifierFlags.contains(.shift)
                             || event.modifierFlags.contains(.capsLock)
@@ -323,7 +367,7 @@ struct NeoMouse: App {
                             return
                         }
                         break
-                    //TODO change to current focused app and add in for g$
+                    // TODO change to current focused app and add in for g$
                     case keyCodeToCharMap["4"]:
                         guard event.modifierFlags.contains(.shift) else {
                             if event.modifierFlags.rawValue == 256 {
@@ -383,6 +427,26 @@ struct NeoMouse: App {
                             return
                         }
                         break
+                    case keyCodeToCharMap["="]:
+                        if event.modifierFlags.contains(.shift) {
+                            pinchZoom(
+                                .in, at: currentCGPoint,
+                                stepValue: operationCount * appState.gestureSteps)
+                            appState.mode = .normal(
+                                currentPendingOperation: nil
+                            )
+                        }
+                        break
+                    case keyCodeToCharMap["-"]:
+                        if event.modifierFlags.rawValue == 256 {
+                            pinchZoom(
+                                .out, at: currentCGPoint,
+                                stepValue: operationCount * appState.gestureSteps)
+                            appState.mode = .normal(
+                                currentPendingOperation: nil
+                            )
+                        }
+                        break
                     default: break
                     }
                 case .find:
@@ -418,7 +482,7 @@ struct NeoMouse: App {
                     //     }
                     //
                     case keyCodeToCharMap["Esc"]:
-                        NeoMouse.exitFindMode(appState: appState)
+                        NeoMouse.enterNormalMode(appState: appState)
                         break
                     default:
                         NeoMouse.executeFindModeOperation(
@@ -433,11 +497,19 @@ struct NeoMouse: App {
                 }
             }
         }
-        NeoMouse.mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { _ in
+        NeoMouse.mouseMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged]
+        ) { _ in
             MainActor.assumeIsolated {
-                guard let loc = getCurrentMouseLocation() else { return }
-                appState.mouseX = loc.x
-                appState.mouseY = loc.y
+                guard appState.isVisual, let loc = getCurrentMouseLocation() else { return }
+                guard
+                    let display = getActiveDisplays().first(where: {
+                        CGDisplayBounds($0).contains(loc)
+                    })
+                else { return }
+                let bounds = CGDisplayBounds(display)
+                appState.endCGXPoint = loc.x - bounds.origin.x
+                appState.endCGYPoint = loc.y - bounds.origin.y
             }
         }
     }
@@ -445,7 +517,7 @@ struct NeoMouse: App {
     var body: some Scene {
         Settings { EmptyView() }
     }
-    private static func exitFindMode(appState: NeoMouseState) {
+    private static func enterNormalMode(appState: NeoMouseState) {
         //TODO: NICE TO HAVE use previous session's
         appState.mode = .normal(currentPendingOperation: nil)
         GridOverlay.shared.hideGrid()
@@ -591,7 +663,7 @@ struct NeoMouse: App {
                 appState.gridInset + CGFloat(row) * cellHeight + CGFloat(innerRow)
                 * innerCellHeight + innerCellHeight / 2
             moveMouseByExactCoordinatesOnCurrentScreen(x: targetX, y: targetY)
-            NeoMouse.exitFindMode(appState: appState)
+            NeoMouse.enterNormalMode(appState: appState)
 
         }
     }
@@ -660,6 +732,73 @@ struct ToastView: View {
     }
 }
 
+@MainActor
+final class VisualHighlightOverlay {
+    static let shared = VisualHighlightOverlay()
+    private var window: NSWindow?
+    private weak var appState: NeoMouseState?
+
+    func passAppState(state: NeoMouseState) {
+        appState = state
+        toggle()
+    }
+    func toggle() {
+        guard let screen = (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }),
+            let appState,
+            appState.isVisual == true
+        else { return }
+        if window == nil {
+            let win = NSWindow(
+                contentRect: screen.frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            win.isOpaque = false
+            win.backgroundColor = .clear
+            win.level = .screenSaver  // 101
+            win.ignoresMouseEvents = true
+            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            win.contentView = NSHostingView(rootView: VisualHighlightOverlayView(state: appState))
+            window = win
+        }
+        window?.setFrame(screen.frame, display: true)
+        window?.orderFrontRegardless()
+    }
+
+    func hideOverlay() {
+        window?.orderOut(nil)
+    }
+}
+
+struct VisualHighlightOverlayView: View {
+    @ObservedObject var state: NeoMouseState
+
+    private var startX: CGFloat { state.startCGXPoint ?? 0 }
+    private var startY: CGFloat { state.startCGYPoint ?? 0 }
+    private var endX: CGFloat { state.endCGXPoint ?? startX }
+    private var endY: CGFloat { state.endCGYPoint ?? startY }
+
+    private var width: CGFloat { abs(endX - startX) }
+    private var height: CGFloat { abs(endY - startY) }
+
+    var body: some View {
+        guard state.isVisual, width > 0, height > 0 else { return AnyView(EmptyView()) }
+
+        return AnyView(
+            GeometryReader { _ in
+                Rectangle()
+                    .fill(.yellow.opacity(0.3))
+                    .frame(width: width, height: height)
+                    .position(
+                        x: (startX + endX) / 2,
+                        y: (startY + endY) / 2
+                    )
+            }
+        )
+    }
+}
+
 // MARK: - Grid Overlay
 
 @MainActor
@@ -695,8 +834,12 @@ final class GridOverlay {
 
     private func show() {
         guard let screen = (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }),
-            let appState
-        else { return }
+            let appState,
+            case .find = appState.mode
+        else {
+            return
+                debug("Should not happen: not in find mode within GridOverlayView")
+        }
         if window == nil {
             let win = NSWindow(
                 contentRect: screen.frame,
@@ -741,7 +884,6 @@ struct GridOverlayView: View {
                     let innerCellHeight = cellHeight / CGFloat(state.innerGridDivisions)
                     guard case .find(_, let findState) = state.mode else {
                         return
-                            debug("Should not happen: not in find mode within GridOverlayView")
                     }
                     if let outerIndex = findState.pendingGridDivisionIndex {
                         // Narrow to selected outer cell after first keypress
