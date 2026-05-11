@@ -119,7 +119,7 @@ sudo install -m 755 ./neomouse /usr/local/bin/neomouse
 
 ## Development
 
-Requires Swift 6.3+ (`swift --version`). No Xcode required for building — Command Line Tools is enough. `make` is the front door for every common task; underlying `swift` commands are documented below in case you want to invoke them directly.
+Requires Swift 6.3+ (`swift --version`). No Xcode required for building — Command Line Tools is enough. [`just`](https://github.com/casey/just) is the front door for every common task; underlying `swift` commands are documented below if you'd rather invoke them directly.
 
 ### Setup
 
@@ -127,39 +127,43 @@ Requires Swift 6.3+ (`swift --version`). No Xcode required for building — Comm
 git clone https://github.com/KangaZero/neomouse
 cd neomouse
 
+# Install just (the command runner). Pick one:
+cargo install just      # via Rust toolchain
+brew install just       # via Homebrew
+# (or nix profile add nixpkgs#just)
+
 # One-time per clone: enable the repo's git hooks
 scripts/setup-hooks.sh
 ```
 
 `setup-hooks.sh` sets `core.hooksPath=.githooks`. The pre-commit hook runs `swift format lint --strict` on staged Swift files and `swift test` before each commit. The same checks run in CI on every push to `main` and every PR.
 
-### `make` — the catch-all
+### `just` — the catch-all
 
 ```sh
-make help          # list every target with a one-line description
-make               # same as make help
-make all           # catch-all: lint + test + release build (what CI runs)
+just               # list every recipe with a one-line description
+just all           # catch-all: lint + test + release build (what CI runs)
 ```
 
-Other targets:
+Other recipes:
 
-| Target | Does |
+| Recipe | Does |
 |---|---|
-| `make build` | Debug build → `.build/debug/neomouse` |
-| `make release` | Release build → `.build/release/neomouse` |
-| `make run` | Build and run the debug binary |
-| `make run-release` | Build and run the release binary |
-| `make test` | Run the test suite |
-| `make lint` | `swift format lint --strict` on `Sources/` and `Tests/` |
-| `make fmt` | `swift format -i` to auto-format in place |
-| `make check` | `lint + test` (what the pre-commit hook runs) |
-| `make clean` | `swift package clean` and remove `.build/` |
+| `just build` | Debug build → `.build/debug/neomouse` |
+| `just release` | Release build → `.build/release/neomouse` |
+| `just run` | Build and run the debug binary |
+| `just run-release` | Build and run the release binary |
+| `just test` | Run the test suite (with `Testing.framework` rpath flags) |
+| `just lint` | `swift format lint --strict` on `Sources/` and `Tests/` |
+| `just fmt` | `swift format -i` to auto-format in place |
+| `just check` | `lint + test` (what the pre-commit hook runs) |
+| `just clean` | `swift package clean` and remove `.build/` |
 
 macOS will prompt for Accessibility permissions the first time you launch from each build path. Allow `neomouse` in **System Settings → Privacy & Security → Accessibility**, then relaunch.
 
 ### Underlying commands
 
-The Makefile is a thin wrapper. If you want to run things by hand:
+The justfile is a thin wrapper. If you want to run things by hand:
 
 ```sh
 swift build                  # debug build
@@ -178,7 +182,7 @@ swift test \
     -Xlinker -rpath -Xlinker "$DEV_DIR/Library/Developer/usr/lib"
 ```
 
-Full Xcode finds them itself; the flags are harmless either way. `make test` injects these for you.
+Full Xcode finds them itself; the flags are harmless either way. `just test` injects these for you.
 
 ### Debug logging
 
@@ -221,7 +225,7 @@ The env-var checks are evaluated once at module load, so per-`debug()` overhead 
 
 ```
 Package.swift                — SwiftPM manifest
-Makefile                     — developer commands (`make help`)
+justfile                     — developer commands (`just`)
 .swift-format                — formatter / linter config
 .githooks/pre-commit         — lint staged Swift + run tests
 .github/workflows/ci.yml     — CI: lint + build + test on macos-15 (Swift 6.3 via swiftly)
