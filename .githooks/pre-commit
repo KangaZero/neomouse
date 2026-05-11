@@ -1,6 +1,46 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# Pre-commit: lint staged Swift files and run the test suite.
+# Enable with: scripts/setup-hooks.sh (sets core.hooksPath=.githooks)
 
-echo "Currently no test added, TOOD add when possible!"
-# make test
-# echo "opim.nvim: all tests passed."
+set -euo pipefail
+
+step() { printf "\n\033[1;34m==>\033[0m %s\n" "$1"; }
+fail() { printf "\033[1;31merror:\033[0m %s\n" "$1" >&2; exit 1; }
+
+# ---------- lint staged Swift files ----------
+
+staged_swift=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.swift$' || true)
+
+if [[ -n "$staged_swift" ]]; then
+    step "Linting staged Swift files (swift format lint --strict)"
+    command -v swift >/dev/null || fail "swift toolchain not found"
+    # shellcheck disable=SC2086
+    swift format lint --strict $staged_swift \
+        || fail "swift format lint failed. Run: swift format -i --recursive Sources Tests"
+else
+    echo "No staged Swift files; skipping lint."
+fi
+
+# ---------- run tests ----------
+#
+# Swift Testing (`import Testing`) needs the Testing.framework + _TestingInterop
+# dylib resolved at runtime. With Command Line Tools (no full Xcode), these
+# live under $(xcode-select -p)/Library/Developer/{Frameworks,usr/lib}, so we
+# inject rpaths pointing there. With full Xcode, the toolchain finds them
+# itself and the extra flags are harmless.
+
+step "Running swift test"
+
+DEV_DIR="$(xcode-select -p)"
+FW="$DEV_DIR/Library/Developer/Frameworks"
+LIB="$DEV_DIR/Library/Developer/usr/lib"
+
+swift test \
+    -Xswiftc -F -Xswiftc "$FW" \
+    -Xlinker -rpath -Xlinker "$FW" \
+    -Xlinker -rpath -Xlinker "$LIB" \
+    --quiet \
+    || fail "Tests failed."
+
+echo
+echo "Pre-commit checks passed."

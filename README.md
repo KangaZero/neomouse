@@ -10,9 +10,16 @@ The goal is to feel like you never left Vim — mouse control that maps naturall
 
 ## Requirements
 
-- macOS 13 (Ventura) or later
-- Swift 6.3+ toolchain (Xcode 16 or `swift --version` ≥ 6.3)
-- Accessibility permissions (granted on first run)
+| | Minimum | Check with |
+|---|---|---|
+| macOS | 13 (Ventura) | `sw_vers` |
+| Swift toolchain | 6.3 | `swift --version` |
+| bash (release script only) | 3.2 (default on macOS) | `bash --version` |
+| `gh` CLI (release script only) | any | `gh --version` |
+
+Accessibility permissions are requested by the app on first run.
+
+The Swift toolchain and macOS minimums are enforced by `Package.swift` — SwiftPM will refuse to build on older systems with a clear error.
 
 ## Build
 
@@ -60,6 +67,20 @@ Sources/neomouse/            — app sources
 Tests/neomouseTests/         — unit tests
 ```
 
+## Contributing
+
+After cloning, enable the repo's git hooks (one-time, per clone):
+
+```sh
+scripts/setup-hooks.sh
+```
+
+This points `core.hooksPath` at `.githooks/`, so the pre-commit hook runs `swift format lint` on staged Swift files and `swift test` before each commit. The same checks run in CI on every push to `main` and every PR.
+
 ## Status
 
 Active development. See [TODO.md](TODO.md) for the roadmap.
+
+## Releases
+
+Pre-built binaries are published on the [Releases page](https://github.com/KangaZero/neomouse/releases). To cut a new release, see [RELEASING.md](RELEASING.md).

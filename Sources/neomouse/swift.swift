@@ -207,60 +207,23 @@ struct NeoMouse: App {
                             "Find Mode")
                         return
                     // INFO: Here starts VIM-like motions on the cursor
-                    case "h":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: nil
-                            )
-                        }
-                        moveMouseRelatively(
-                            x: -appState.rangeX * operationCount, y: 0,
-                            enableClampToCurrentScreen:
-                                appState.isClampCursorToCurrentScreen)
-                        appState.mode = .normal(
-                            currentPendingOperation: nil
-                        )
-                        break
                     //TODO check that if the operation except the lastIndex are only nums
-                    case "j":
-                        guard event.modifierFlags.rawValue == 256 else {
+                    case "h", "j", "k", "l":
+                        guard
+                            event.modifierFlags.rawValue == 256,
+                            let key = event.characters,
+                            let direction = HJKLDirection(key)
+                        else {
                             return appState.mode = .normal(
                                 currentPendingOperation: nil
                             )
                         }
+                        let delta = direction.delta(
+                            stepX: appState.rangeX,
+                            stepY: appState.rangeY,
+                            count: operationCount)
                         moveMouseRelatively(
-                            x: 0, y: appState.rangeY * operationCount,
-                            enableClampToCurrentScreen:
-                                appState.isClampCursorToCurrentScreen)
-                        appState.mode = .normal(
-                            currentPendingOperation: nil
-                        )
-                        break
-                    case "k":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: nil
-                            )
-                        }
-                        moveMouseRelatively(
-                            x: 0, y: -appState.rangeY * operationCount,
-                            enableClampToCurrentScreen:
-                                appState.isClampCursorToCurrentScreen)
-                        appState.mode = .normal(
-                            currentPendingOperation: nil
-                        )
-                        break
-                    case "l":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: nil
-                            )
-                        }
-                        // appState.mode = .normal(
-                        //     currentPendingOperation: "\(operationCount)h",
-                        // )
-                        moveMouseRelatively(
-                            x: appState.rangeX * operationCount, y: 0,
+                            x: delta.dx, y: delta.dy,
                             enableClampToCurrentScreen:
                                 appState.isClampCursorToCurrentScreen)
                         appState.mode = .normal(

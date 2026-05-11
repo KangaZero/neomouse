@@ -22,3 +22,6 @@ DerivedData/
 
 # Release artifacts
 dist/
+
+# Claude Code local settings
+.claude/

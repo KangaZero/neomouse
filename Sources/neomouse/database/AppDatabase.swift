@@ -87,7 +87,9 @@ func seedMark(numberOfMarks: Int) {
         String($0)
     }
     guard numberOfMarks <= markCharacters.count || numberOfMarks <= 0 else {
-        debug("Number of marks to seed exceeds available unique characters: \(markCharacters.count) or is 0 or less: ", numberOfMarks)
+        debug(
+            "Number of marks to seed exceeds available unique characters: \(markCharacters.count) or is 0 or less: ",
+            numberOfMarks)
         return
     }
 

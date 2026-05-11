@@ -37,11 +37,17 @@ func screenLayouts() {
         let frame = CGDisplayBounds(id)
         let position: String
         // CG coords: y=0 at top of primary, y increases downward
-        if frame.minX >= mainBounds.maxX { position = "right" }
-        else if frame.maxX <= mainBounds.minX { position = "left" }
-        else if frame.maxY <= mainBounds.minY { position = "above" }
-        else if frame.minY >= mainBounds.maxY { position = "below" }
-        else { position = "main" }
+        if frame.minX >= mainBounds.maxX {
+            position = "right"
+        } else if frame.maxX <= mainBounds.minX {
+            position = "left"
+        } else if frame.maxY <= mainBounds.minY {
+            position = "above"
+        } else if frame.minY >= mainBounds.maxY {
+            position = "below"
+        } else {
+            position = "main"
+        }
         print("Display \(id): \(position) — \(frame)")
     }
 }
