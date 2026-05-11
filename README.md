@@ -81,6 +81,24 @@ This points `core.hooksPath` at `.githooks/`, so the pre-commit hook runs `swift
 
 Active development. See [TODO.md](TODO.md) for the roadmap.
 
+## Install
+
+Three options, in order of friction:
+
+```sh
+# Homebrew (via a personal tap)
+brew tap KangaZero/neomouse
+brew install neomouse
+
+# Nix (flake, runs without installing)
+nix run github:KangaZero/neomouse
+
+# Manual: download the release tarball
+# See the Releases page below.
+```
+
+Apple Silicon only for now.
+
 ## Releases
 
 Pre-built binaries are published on the [Releases page](https://github.com/KangaZero/neomouse/releases). To cut a new release, see [RELEASING.md](RELEASING.md).

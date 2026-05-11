@@ -78,6 +78,11 @@ tar -czf "$ARCHIVE" -C .build/release neomouse
 
 ls -la "$ARCHIVE" "$ARCHIVE.sha256"
 
+# Values reused by the Homebrew + flake bump steps below.
+HASH_HEX="$(awk '{print $1}' "$ARCHIVE.sha256")"
+ASSET_URL="https://github.com/KangaZero/neomouse/releases/download/${VERSION}/${ARCHIVE_NAME}"
+BARE_VERSION="${VERSION#v}"
+
 # ---------- tag + push ----------
 
 step "Tagging $VERSION"
@@ -144,12 +149,8 @@ if [[ "${SKIP_HOMEBREW:-}" == "1" ]]; then
 else
     step "Bumping Homebrew formula in KangaZero/homebrew-neomouse"
 
-    HASH="$(awk '{print $1}' "$ARCHIVE.sha256")"
-    ASSET_URL="https://github.com/KangaZero/neomouse/releases/download/${VERSION}/${ARCHIVE_NAME}"
-    BARE_VERSION="${VERSION#v}"
-
     TAP_DIR="$(mktemp -d)"
-    # Append cleanup to the existing trap (which already removes NOTES_FILE).
+    # Append tap-dir cleanup to the existing trap (which removes NOTES_FILE).
     trap 'rm -f "$NOTES_FILE"; rm -rf "$TAP_DIR"' EXIT
 
     git clone --quiet --depth 1 \
@@ -161,14 +162,13 @@ else
     # BSD sed (macOS) — anchor each replacement to the field it should match.
     sed -i.bak \
         -e "s|^  url \".*\"|  url \"$ASSET_URL\"|" \
-        -e "s|^  sha256 \".*\"|  sha256 \"$HASH\"|" \
+        -e "s|^  sha256 \".*\"|  sha256 \"$HASH_HEX\"|" \
         -e "s|^  version \".*\"|  version \"$BARE_VERSION\"|" \
         "$FORMULA"
     rm -f "$FORMULA.bak"
 
-    # Sanity check: ensure the new values actually appear.
-    grep -q "$ASSET_URL" "$FORMULA"   || fail "Formula url did not update"
-    grep -q "$HASH"      "$FORMULA"   || fail "Formula sha256 did not update"
+    grep -q "$ASSET_URL"    "$FORMULA" || fail "Formula url did not update"
+    grep -q "$HASH_HEX"     "$FORMULA" || fail "Formula sha256 did not update"
     grep -q "$BARE_VERSION" "$FORMULA" || fail "Formula version did not update"
 
     if git -C "$TAP_DIR" diff --quiet -- Formula/neomouse.rb; then
@@ -180,6 +180,37 @@ else
             commit -q -m "neomouse $VERSION"
         git -C "$TAP_DIR" push --quiet origin HEAD
         echo "Pushed formula bump to homebrew-neomouse."
+    fi
+fi
+
+# ---------- bump in-repo flake.nix ----------
+
+if [[ "${SKIP_FLAKE:-}" == "1" ]]; then
+    step "Skipping flake.nix bump (SKIP_FLAKE=1)"
+elif [[ ! -f flake.nix ]]; then
+    step "No flake.nix in repo; skipping flake bump"
+else
+    step "Bumping in-repo flake.nix"
+
+    command -v nix >/dev/null || fail "nix not found; can't compute SRI hash"
+    SRI_HASH="$(nix hash convert --hash-algo sha256 --to sri "$HASH_HEX")"
+
+    sed -i.bak \
+        -e "s|version = \".*\";|version = \"$BARE_VERSION\";|" \
+        -e "s|hash = \"sha256-.*\";|hash = \"$SRI_HASH\";|" \
+        flake.nix
+    rm -f flake.nix.bak
+
+    grep -q "version = \"$BARE_VERSION\";" flake.nix || fail "flake.nix version did not update"
+    grep -q "$SRI_HASH" flake.nix || fail "flake.nix hash did not update"
+
+    if git diff --quiet -- flake.nix; then
+        echo "flake.nix already at $VERSION; nothing to commit."
+    else
+        git add flake.nix
+        git commit -q -m "flake: bump to $VERSION"
+        git push --quiet origin main
+        echo "Pushed flake.nix bump to origin/main."
     fi
 fi
 

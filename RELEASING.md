@@ -43,8 +43,9 @@ The script accepts either `v0.1.0` or bare `0.1.0` — it normalizes.
 5. **Tag** — annotated tag pushed to `origin`.
 6. **Release** — `gh release create` with the archive + checksum attached. Release notes are auto-generated from `git log <prev-tag>..<this-tag>`.
 7. **Homebrew tap bump** — clones `KangaZero/homebrew-neomouse`, rewrites `Formula/neomouse.rb`'s `url` / `sha256` / `version` to the new release, commits as `neomouse <VERSION>`, and pushes. Skip with `SKIP_HOMEBREW=1 scripts/release.sh ...`.
+8. **Flake bump** — rewrites the in-repo `flake.nix` `version` + `hash` (SRI-encoded SHA-256) to the new release, commits as `flake: bump to <VERSION>`, and pushes to `origin/main`. So `nix run github:KangaZero/neomouse` always tracks latest. Skip with `SKIP_FLAKE=1`.
 
-Order matters: local artifacts and the tag are produced before anything is pushed remotely, so a failure in the build won't leave you with a dangling tag on GitHub. The Homebrew bump runs last so it only fires when the release assets are confirmed published.
+Order matters: local artifacts and the tag are produced before anything is pushed remotely, so a failure in the build won't leave you with a dangling tag on GitHub. The Homebrew + flake bumps run last so they only fire when the release assets are confirmed published.
 
 ## Recovering from a failed release
 
