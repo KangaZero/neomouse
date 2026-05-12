@@ -10,7 +10,12 @@ let package = Package(
     ],
     dependencies: [
         //SQLite toolkit
-        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0")
+        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0"),
+        .package(url: "https://github.com/dduan/TOMLDecoder", exact: "0.4.4"),
+        // Apple's swift-testing — bundled with full Xcode but not the bare
+        // Command Line Tools install, so declare explicitly to keep tests
+        // portable across toolchains.
+        .package(url: "https://github.com/swiftlang/swift-testing", exact: "6.3.1"),
     ],
 
     targets: [
@@ -19,12 +24,41 @@ let package = Package(
         .executableTarget(
             name: "neomouse",
             dependencies: [
-                .product(name: "GRDB", package: "GRDB.swift")
-            ]
+                "neomouseDB",
+                "neomouseUtils",
+                "neomouseConfig",
+            ],
+            path: "Sources/neomouse",
+        ),
+        .target(
+            name: "neomouseDB",
+            dependencies: [
+                "neomouseUtils",
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "TOMLDecoder", package: "TOMLDecoder"),
+            ],
+            path: "Sources/neomouseDB",
+        ),
+        .target(
+            name: "neomouseUtils",
+            dependencies: [],
+            path: "Sources/neomouseUtils",
+        ),
+        .target(
+            name: "neomouseConfig",
+            dependencies: [
+                "neomouseUtils",
+                .product(name: "TOMLDecoder", package: "TOMLDecoder"),
+            ],
+            path: "Sources/neomouseConfig",
         ),
         .testTarget(
             name: "neomouseTests",
-            dependencies: ["neomouse"]
+            dependencies: [
+                "neomouse", "neomouseDB", "neomouseUtils", "neomouseConfig",
+                .product(name: "Testing", package: "swift-testing"),
+            ],
+            path: "Tests/neomouseTests",
         ),
     ],
     swiftLanguageModes: [.v6]

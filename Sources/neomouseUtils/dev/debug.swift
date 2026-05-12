@@ -73,7 +73,7 @@ private func formatDateToLocaleTime(date: Date) -> String {
     return dateFormatter.string(from: date)
 }
 
-func debug(_ message: Any...) {
+public func debug(_ message: Any...) {
     guard stdoutEnabled || logFileHandle != nil else { return }
 
     let timestamp = formatDateToLocaleTime(date: Date())

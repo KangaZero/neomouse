@@ -1,0 +1,37 @@
+#:schema ./schema/settings.schema.json
+# Neomouse configuration. TOML 1.1-compatible (no features beyond TOML 1.0 used).
+# Spec: https://toml.io/en/v1.0.0
+# Schema: ./schema/settings.schema.json — Taplo enforces it (`just check-config`).
+#
+# Resolution at startup (first match wins):
+#   1. $NEOMOUSE_CONFIG
+#   2. ~/.config/neomouse/settings.toml
+#   3. ~/Library/Application Support/neomouse/settings.toml
+
+[grid]
+inset = 10.0
+divisions = 5
+inner_divisions = 3
+# Outer/inner cell labels. One char per cell, left-to-right then top-to-bottom.
+# Length must be >= divisions * divisions (and inner_divisions * inner_divisions).
+find_mode_characters = "abcdefghijklmnopqrstuvwxyz"
+find_mode_inner_characters = "abcdefghijklmnopqrstuvwxyz"
+is_always_show_inner_characters = true
+
+[motion]
+lines_on_screen = 50.0
+range_x = 20.0
+range_y = 20.0
+is_clamp_cursor_to_current_screen = false
+
+[visual]
+minimum_highlight_width = 5
+
+[gesture]
+zoom_step_value = 0.1      # 0.01 .. 10
+increments_per_gesture = 5
+degrees_to_rotate = 90.0
+
+[commands]
+# Commands exposed in command-line mode.
+available = ["numbers", "relativenumbers"]

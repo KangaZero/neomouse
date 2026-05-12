@@ -42,11 +42,16 @@ lint:
 fmt:
     swift format -i --recursive Sources Tests
 
-# Lint + test — what the pre-commit hook runs
-check: lint test
+# Validate settings.toml against schema/settings.schema.json via Taplo.
+# Install Taplo with `mise install` (pinned in mise.toml) or `brew install taplo`.
+check-config:
+    taplo check settings.toml
 
-# Catch-all: lint + test + release build — what CI runs
-all: lint test release
+# Lint + test + config schema check — what the pre-commit hook runs
+check: lint test check-config
+
+# Catch-all: lint + test + config check + release build — what CI runs
+all: lint test check-config release
 
 # Remove SwiftPM build artifacts
 clean:

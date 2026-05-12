@@ -1,7 +1,7 @@
 import CoreGraphics
 import Testing
 
-@testable import neomouse
+import neomouseUtils
 
 @Suite("HJKL direction mapping (normal mode)")
 struct HJKLTests {

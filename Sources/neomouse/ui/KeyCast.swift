@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+import neomouseUtils
+
 @MainActor
 final class KeyCast {
     static let shared = KeyCast()

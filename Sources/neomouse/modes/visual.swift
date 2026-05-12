@@ -1,5 +1,7 @@
 import AppKit
 
+import neomouseUtils
+
 @MainActor
 func exitVisualMode(appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay) {
     guard appState.startCGXPoint != nil && appState.endCGXPoint != nil else { return }

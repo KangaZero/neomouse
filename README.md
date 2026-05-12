@@ -6,7 +6,9 @@ The goal is to feel like you never left Vim — mouse control that maps naturall
 
 ## How it works
 
-`neomouse` is a SwiftUI macOS app that installs a global event monitor to intercept keyboard events and translate Vim motions into mouse movements and gestures. It uses [GRDB](https://github.com/groue/GRDB.swift) for local session state.
+`neomouse` is a SwiftUI macOS app that installs a global event monitor to intercept keyboard events and translate Vim motions into mouse movements and gestures. It lives in the menu bar (no Dock icon) and runs in the background.
+
+The codebase is a multi-target SwiftPM package: a thin `neomouse` executable that owns the app shell, plus three libraries — `neomouseUtils` (input / screen / window / gesture helpers), `neomouseDB` ([GRDB](https://github.com/groue/GRDB.swift)-backed session and marks store), and `neomouseConfig` ([TOMLDecoder](https://github.com/dduan/TOMLDecoder)-backed runtime configuration). Runtime tuning lives in `settings.toml`, validated against `schema/settings.schema.json`.
 
 ## Requirements
 
@@ -131,16 +133,18 @@ cd neomouse
 scripts/setup-hooks.sh
 ```
 
-The repo pins its dev tooling — currently just `just` itself — in `mise.toml`, so it stays out of your global environment. If you use [mise](https://mise.jdx.dev/) (recommended; install with `brew install mise` or `curl https://mise.run | sh`):
+The repo pins its dev tooling — `swift`, `just`, and `taplo` — in `mise.toml`, so it stays out of your global environment. If you use [mise](https://mise.jdx.dev/) (recommended; install with `brew install mise` or `curl https://mise.run | sh`):
 
 ```sh
 mise trust   # one-time, allow this repo's mise.toml to run
 mise install # fetches the pinned versions
 ```
 
-mise installs `just` into `~/.local/share/mise/installs/just/<version>/` and only adds it to `PATH` while you're inside this repo (via the shell hook). Outside the repo, `just` is unavailable.
+mise installs each tool into `~/.local/share/mise/installs/<tool>/<version>/` and only adds them to `PATH` while you're inside this repo (via the shell hook). Outside the repo, none of them are available.
 
-If you don't use mise, install `just` however you prefer (`brew install just`, `cargo install just`, `nix profile add nixpkgs#just`).
+> The swift pin matters: macOS's Command Line Tools toolchain ships `Testing.framework` without the `_TestingInterop` C bridge that `swift-testing` 6.3 hard-links. The swift.org toolchain (what mise installs) ships both, so `swift test` works without any rpath gymnastics. Full Xcode also works.
+
+If you don't use mise, install `swift` from [swift.org](https://www.swift.org/install/), and `just` / `taplo` however you prefer (`brew install just taplo`, etc.).
 
 `setup-hooks.sh` sets `core.hooksPath=.githooks`. The pre-commit hook runs `swift format lint --strict` on staged Swift files and `swift test` before each commit. The same checks run in CI on every push to `main` and every PR.
 
@@ -159,10 +163,11 @@ Other recipes:
 | `just release` | Release build → `.build/release/neomouse` |
 | `just run` | Build and run the debug binary |
 | `just run-release` | Build and run the release binary |
-| `just test` | Run the test suite (with `Testing.framework` rpath flags) |
+| `just test` | Run the test suite (`swift test`) |
 | `just lint` | `swift format lint --strict` on `Sources/` and `Tests/` |
 | `just fmt` | `swift format -i` to auto-format in place |
-| `just check` | `lint + test` (what the pre-commit hook runs) |
+| `just check-config` | Validate `settings.toml` against `schema/settings.schema.json` (Taplo) |
+| `just check` | `lint + test + check-config` (what the pre-commit hook runs) |
 | `just clean` | `swift package clean` and remove `.build/` |
 
 macOS will prompt for Accessibility permissions the first time you launch from each build path. Allow `neomouse` in **System Settings → Privacy & Security → Accessibility**, then relaunch.
@@ -176,23 +181,26 @@ swift build                  # debug build
 swift build -c release       # release build
 swift run                    # build + run debug
 swift run -c release         # build + run release
+swift test                   # run the test suite
 ```
 
-For `swift test`, the test target uses `import Testing` (Swift Testing), which needs `Testing.framework` and `lib_TestingInterop.dylib` resolved at runtime. Under Command Line Tools they live under `$(xcode-select -p)` but aren't on the default rpath, so `swift test` needs:
+`swift test` uses [swift-testing](https://github.com/swiftlang/swift-testing) (`import Testing`). With the mise-pinned swift.org toolchain (or full Xcode), it Just Works — both `Testing` and `_TestingInterop` ship in the toolchain. If you're stuck on a Command Line Tools-only install, `_TestingInterop` is missing and the link step will fail; install full Xcode or use the mise pin above.
 
-```sh
-DEV_DIR="$(xcode-select -p)"
-swift test \
-    -Xswiftc -F -Xswiftc "$DEV_DIR/Library/Developer/Frameworks" \
-    -Xlinker -rpath -Xlinker "$DEV_DIR/Library/Developer/Frameworks" \
-    -Xlinker -rpath -Xlinker "$DEV_DIR/Library/Developer/usr/lib"
-```
+### Configuration
 
-Full Xcode finds them itself; the flags are harmless either way. `just test` injects these for you.
+Runtime tuning is in `settings.toml`. `Config.loadConfig` is called once at app start; properties on `NeoMouseState` fall back to inline defaults when no settings file is resolved. Resolution order (first match wins):
+
+1. `$NEOMOUSE_CONFIG`
+2. `~/.config/neomouse/settings.toml`
+3. `~/Library/Application Support/neomouse/settings.toml`
+
+The repo-root `settings.toml` is a **template**, not auto-loaded. For local dev, either symlink it (`ln -s "$(pwd)/settings.toml" ~/.config/neomouse/settings.toml`) or `export NEOMOUSE_CONFIG="$(pwd)/settings.toml"`.
+
+`just check-config` runs Taplo against `schema/settings.schema.json` so schema drift is caught at commit time, not at startup.
 
 ### Debug logging
 
-`debug(...)` in `Sources/neomouse/utils/debug.swift` writes to two independent sinks: **stdout** and **a log file**. Each is gated separately.
+`debug(...)` in `Sources/neomouseUtils/dev/debug.swift` writes to two independent sinks: **stdout** and **a log file**. Each is gated separately.
 
 **Stdout** is enabled when either:
 
@@ -230,25 +238,38 @@ The env-var checks are evaluated once at module load, so per-`debug()` overhead 
 ### Project layout
 
 ```
-Package.swift                — SwiftPM manifest
+Package.swift                — SwiftPM manifest (1 executable + 3 library targets)
+settings.toml                — runtime config template (TOML)
+schema/settings.schema.json  — JSON schema enforced by Taplo (`just check-config`)
 justfile                     — developer commands (`just`)
-mise.toml                    — project-local dev tool versions (mise)
+mise.toml                    — pinned dev tool versions: swift, just, taplo (mise)
 .swift-format                — formatter / linter config
-.githooks/pre-commit         — lint staged Swift + run tests
+.githooks/pre-commit         — lint staged Swift + run tests + check-config
 .github/workflows/ci.yml     — CI: lint + build + test on macos-15 (Swift 6.3 via swiftly)
 scripts/release.sh           — cut a release (binary + tarball + tag + GitHub Release + brew tap bump + flake bump)
 scripts/setup-hooks.sh       — one-time hook activation
 
-Sources/neomouse/            — app sources
-  swift.swift                — @main entry point, event monitors, app state
-  mode.swift                 — mode definitions (normal, visual, find, …)
-  operation.swift            — keymap → operation dispatch
-  undotree.swift             — undo/redo state
-  ui/                        — SwiftUI overlays (command line, keycast)
-  utils/                     — helpers (mouse, screen, window, gestures, …)
-    debug.swift              — gated debug logger (see Debug logging above)
-    hjkl.swift               — pure direction → CGVector helper, unit-tested
-  database/                  — GRDB session store
+Sources/neomouse/            — executable target: app shell, modes, overlays
+  NeoMouseApp.swift          — @main entry, NeoMouseState, key/mouse event monitors
+  AppDelegate.swift          — applicationWillTerminate cleanup; .accessory activation policy
+  modes/visual.swift         — visual-mode exit + selection-state reset
+  types/mode.swift           — Mode enum (disabled, normal, find, …)
+  ui/MenuBar.swift           — MenuBarExtra status item (Quit)
+  ui/CommandLine.swift       — command-line overlay
+  ui/KeyCast.swift           — keycast overlay
+
+Sources/neomouseUtils/       — library: input / screen / window / gesture helpers
+  mouse.swift                — moveMouse*, mouseDown/Up/Drag, scroll
+  screen.swift               — multi-display geometry, CG ↔ AppKit rect conversion
+  window.swift               — frontmost-app AX window introspection
+  hjkl.swift                 — pure direction → CGVector helper (unit-tested)
+  keyCodeToCharMap.swift     — keycode ↔ character lookup table
+  actions/gestures.swift     — pinchZoom, rotate, swipe, smartMagnify
+  actions/postGestureEvent.swift — low-level kCGEventGesture poster
+  dev/debug.swift            — gated debug logger (see Debug logging above)
+
+Sources/neomouseDB/          — library: GRDB-backed sessions and marks store
+Sources/neomouseConfig/      — library: TOMLDecoder → Config; LoadError; resolution paths
 
 Tests/neomouseTests/         — swift-testing (`import Testing`) suites
 ```

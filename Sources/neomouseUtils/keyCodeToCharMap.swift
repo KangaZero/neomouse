@@ -50,7 +50,7 @@
 // ]
 import Carbon
 
-func keyCodeToChar(_ keyCode: UInt16) -> String? {
+public func keyCodeToChar(_ keyCode: UInt16) -> String? {
     let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
     guard let layoutData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
     else { return nil }
@@ -80,7 +80,7 @@ func keyCodeToChar(_ keyCode: UInt16) -> String? {
 }
 
 // reverse — build the map dynamically
-func buildKeyCodeMap() -> [String: UInt16] {
+public func buildKeyCodeMap() -> [String: UInt16] {
     var map: [String: UInt16] = [:]
     //INFO: macOS hardware keyboards have keycodes that only go up to 127 (0–127), so 128 covers the full range. It's not a magic number — it's just UInt7 max + 1.
     for keyCode in 0..<128 {
@@ -111,4 +111,4 @@ func buildKeyCodeMap() -> [String: UInt16] {
     return map
 }
 
-let keyCodeToCharMap = buildKeyCodeMap()
+public let keyCodeToCharMap = buildKeyCodeMap()

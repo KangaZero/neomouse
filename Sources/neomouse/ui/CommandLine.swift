@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+import neomouseUtils
+
 @MainActor
 final class CommandLine {
     static let shared = CommandLine()

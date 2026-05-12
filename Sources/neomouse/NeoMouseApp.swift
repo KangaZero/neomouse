@@ -1,19 +1,13 @@
 import AppKit
 import SwiftUI
 
-//
-// struct PendingOperation {
-//     var operation: String
-//     var pendingGridDivisionIndex: Int?
-//     var pendingInnerGridDivisionIndex: Int?
-// }
+import neomouseConfig
+import neomouseDB
+import neomouseUtils
 
 class NeoMouseState: ObservableObject {
     @Published var mode: Mode = .disabled
-    // @Published var isNeomouseMode = false
-    // @Published var isFindMode = false
-    // @Published var isCommandLineMode = false
-    @Published var gridInset: CGFloat = 10
+    @Published var gridInset: CGFloat
     //TODO Eventually use Session.Operations Table for the below Published var
     @Published var isVisual: Bool = false
     @Published var previousStartCGXPoint: CGFloat? = nil
@@ -25,37 +19,71 @@ class NeoMouseState: ObservableObject {
     @Published var endCGXPoint: CGFloat? = nil
     @Published var endCGYPoint: CGFloat? = nil
 
-    let commands: [String] = ["numbers, relativenumbers"]
+    let commands: [String]
     //WARNING: Until a good dynamic solution is found, do not allow these 2 to be mutable, could be a headache as divisionCharacters may
     //need to added in to take in account if gridDivisions increased
-    let gridDivisions: Int = 5
-    let innerGridDivisions: Int = 3
-    let findModeGridDivisionCharacters: [String] = "abcdefghijklmnopqrstuvwxyz".map {
-        String($0)
-    }
-    let findModeInnerGridDivisionCharacters: [String] = "abcdefghijklmnopqrstuvwxyz".map {
-        String($0)
-    }
-    let linesOnScreen: CGFloat = 50
-    let minimumHighlightWidth = 5
-    let rangeX: CGFloat = 20
-    let rangeY: CGFloat = 20
+    let gridDivisions: Int
+    let innerGridDivisions: Int
+    let findModeGridDivisionCharacters: [String]
+    let findModeInnerGridDivisionCharacters: [String]
+    let linesOnScreen: CGFloat
+    let minimumHighlightWidth: Int
+    let rangeX: CGFloat
+    let rangeY: CGFloat
 
     // Gesture related settings
-    let zoomStepValue: Double = 0.1  // from 0.01 to 10
-    let incrementsPerGesture: UInt = 5
-    let degreesToRotate: Double = 90
-    // let isIgnoresSafeArea = true
-    let isAlwaysShowInnerGridCharacters = true
-    let isClampCursorToCurrentScreen = false
+    let zoomStepValue: Double
+    let incrementsPerGesture: UInt
+    let degreesToRotate: Double
+    let isAlwaysShowInnerGridCharacters: Bool
+    let isClampCursorToCurrentScreen: Bool
+
+    // Single init covers both paths: when neomouseConfig finds settings.toml,
+    // every property comes from there; otherwise each falls back to the same
+    // hardcoded values this class used before config wiring.
+    init(config: Config? = nil) {
+        self.gridInset = config?.grid.inset ?? 10
+        self.commands = config?.commands.available ?? ["numbers", "relativenumbers"]
+        self.gridDivisions = config?.grid.divisions ?? 5
+        self.innerGridDivisions = config?.grid.innerDivisions ?? 3
+        self.findModeGridDivisionCharacters =
+            (config?.grid.findModeCharacters ?? "abcdefghijklmnopqrstuvwxyz").map { String($0) }
+        self.findModeInnerGridDivisionCharacters =
+            (config?.grid.findModeInnerCharacters ?? "abcdefghijklmnopqrstuvwxyz").map { String($0) }
+        self.linesOnScreen = config?.motion.linesOnScreen ?? 50
+        self.minimumHighlightWidth = config?.visual.minimumHighlightWidth ?? 5
+        self.rangeX = config?.motion.rangeX ?? 20
+        self.rangeY = config?.motion.rangeY ?? 20
+        self.zoomStepValue = config?.gesture.zoomStepValue ?? 0.1
+        self.incrementsPerGesture = config?.gesture.incrementsPerGesture ?? 5
+        self.degreesToRotate = config?.gesture.degreesToRotate ?? 90
+        self.isAlwaysShowInnerGridCharacters = config?.grid.isAlwaysShowInnerCharacters ?? true
+        self.isClampCursorToCurrentScreen = config?.motion.isClampCursorToCurrentScreen ?? false
+    }
 }
 
 @main
 struct NeoMouse: App {
-    private static var keyMonitor: Any?
-    private static var mouseMonitor: Any?
-    private static let sharedState = NeoMouseState()
+    static var keyMonitor: Any?
+    static var mouseMonitor: Any?
+    static let sharedState: NeoMouseState = {
+        guard let url = Config.resolvedURL else {
+            debug("No settings.toml found at any resolved path; using built-in defaults")
+            return NeoMouseState()
+        }
+        do {
+            let config = try Config.loadConfig(from: url)
+            debug("Loaded config from \(url.path)")
+            return NeoMouseState(config: config)
+        } catch {
+            debug("Config load failed (\(error)); falling back to built-in defaults")
+            return NeoMouseState()
+        }
+    }()
     @StateObject private var appState = NeoMouse.sharedState
+    // Bridges SwiftUI's value-type App into AppKit's reference-type lifecycle
+    // so we receive applicationWillTerminate before the process exits.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
         //TODO add checks to make sure no unintended behavior of out of bounds access happens
@@ -548,7 +576,7 @@ struct NeoMouse: App {
     }
 
     var body: some Scene {
-        Settings { EmptyView() }
+        MenuBar()
     }
     private static func enterNormalMode(appState: NeoMouseState) {
         //TODO: NICE TO HAVE use previous session's

@@ -1,6 +1,6 @@
 import CoreGraphics
 
-func getActiveDisplays() -> [CGDirectDisplayID] {
+public func getActiveDisplays() -> [CGDirectDisplayID] {
     var count: UInt32 = 0
     CGGetActiveDisplayList(0, nil, &count)
     var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
@@ -8,20 +8,20 @@ func getActiveDisplays() -> [CGDirectDisplayID] {
     return displays
 }
 
-func getCurrentScreenSize() -> CGSize? {
+public func getCurrentScreenSize() -> CGSize? {
     guard let mouseLoc = CGEvent(source: nil)?.location else { return nil }
     return getActiveDisplays().first(where: { CGDisplayBounds($0).contains(mouseLoc) }).map {
         CGDisplayBounds($0).size
     }
 }
 
-func getAllScreensBoundingRect() -> CGRect {
+public func getAllScreensBoundingRect() -> CGRect {
     return getActiveDisplays().reduce(CGRect.null) { $0.union(CGDisplayBounds($1)) }
 }
 
 // Flip a CG-space rect (y down, origin = top-left of primary) into AppKit space
 // (y up, origin = bottom-left of primary). NSWindow.setFrame wants AppKit.
-func cgRectToAppKitRect(_ rect: CGRect) -> CGRect {
+public func cgRectToAppKitRect(_ rect: CGRect) -> CGRect {
     let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height
     return CGRect(
         x: rect.origin.x,
@@ -31,7 +31,7 @@ func cgRectToAppKitRect(_ rect: CGRect) -> CGRect {
     )
 }
 
-func screenLayouts() {
+public func screenLayouts() {
     let mainBounds = CGDisplayBounds(CGMainDisplayID())
     for id in getActiveDisplays() {
         let frame = CGDisplayBounds(id)

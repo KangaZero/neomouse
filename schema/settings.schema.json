@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opim.nvim/neomouse/settings.schema.json",
+  "title": "Neomouse settings",
+  "description": "Configuration for neomouse. Mirrors the nested `Config` struct in Sources/neomouse/config.swift.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["grid", "motion", "visual", "gesture", "commands"],
+  "properties": {
+    "grid": { "$ref": "#/$defs/grid" },
+    "motion": { "$ref": "#/$defs/motion" },
+    "visual": { "$ref": "#/$defs/visual" },
+    "gesture": { "$ref": "#/$defs/gesture" },
+    "commands": { "$ref": "#/$defs/commands" }
+  },
+  "$defs": {
+    "grid": {
+      "type": "object",
+      "description": "Find-mode grid geometry and labels.",
+      "additionalProperties": false,
+      "required": [
+        "inset",
+        "divisions",
+        "inner_divisions",
+        "find_mode_characters",
+        "find_mode_inner_characters",
+        "is_always_show_inner_characters"
+      ],
+      "properties": {
+        "inset": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Pixels between the grid bounds and the screen edges."
+        },
+        "divisions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 26,
+          "description": "Outer grid cells per axis. Capped at 26 (alphabet length)."
+        },
+        "inner_divisions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 26,
+          "description": "Inner grid cells per axis within a selected outer cell."
+        },
+        "find_mode_characters": {
+          "type": "string",
+          "pattern": "^[a-z]+$",
+          "description": "Outer-cell labels. Length must be >= divisions^2."
+        },
+        "find_mode_inner_characters": {
+          "type": "string",
+          "pattern": "^[a-z]+$",
+          "description": "Inner-cell labels. Length must be >= inner_divisions^2."
+        },
+        "is_always_show_inner_characters": {
+          "type": "boolean",
+          "description": "Render inner-cell labels alongside outer labels at first keypress."
+        }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "description": "Cursor motion behavior in normal mode.",
+      "additionalProperties": false,
+      "required": [
+        "lines_on_screen",
+        "range_x",
+        "range_y",
+        "is_clamp_cursor_to_current_screen"
+      ],
+      "properties": {
+        "lines_on_screen": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Vertical resolution used by `gg`/`G`/count-prefixed motions."
+        },
+        "range_x": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Pixels moved per `h`/`l` step."
+        },
+        "range_y": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Pixels moved per `j`/`k` step."
+        },
+        "is_clamp_cursor_to_current_screen": {
+          "type": "boolean",
+          "description": "If true, hjkl motions stay within the active display."
+        }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "description": "Visual selection appearance.",
+      "additionalProperties": false,
+      "required": ["minimum_highlight_width"],
+      "properties": {
+        "minimum_highlight_width": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Floor pixel width below which the highlight is suppressed."
+        }
+      }
+    },
+    "gesture": {
+      "type": "object",
+      "description": "Pinch-zoom and rotation gesture parameters.",
+      "additionalProperties": false,
+      "required": [
+        "zoom_step_value",
+        "increments_per_gesture",
+        "degrees_to_rotate"
+      ],
+      "properties": {
+        "zoom_step_value": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 10,
+          "description": "Zoom delta per `+`/`-` press. Allowed range: 0.01..10."
+        },
+        "increments_per_gesture": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sub-events emitted per logical gesture for smoother animation."
+        },
+        "degrees_to_rotate": {
+          "type": "number",
+          "description": "Degrees rotated per `r`/`R` press. Negative values reverse direction."
+        }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "description": "Ex-style commands exposed in command-line mode.",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": {
+          "type": "array",
+          "uniqueItems": true,
+          "description": "Whitelist of commands. Must match the `Command` enum in mode.swift.",
+          "items": {
+            "type": "string",
+            "enum": ["numbers", "relativenumbers"]
+          }
+        }
+      }
+    }
+  }
+}

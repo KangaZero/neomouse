@@ -2,5 +2,18 @@
 # `mise install` (or auto_install on directory entry) pulls these into
 # ~/.local/share/mise/installs/ and activates them only inside this repo.
 
+[settings]
+# The swift core plugin is still gated experimental in mise. Scoped to this
+# project so we don't flip the global flag system-wide.
+experimental = true
+
 [tools]
 just = "latest"
+# Taplo: TOML LSP + CLI used by `just check-config` to validate settings.toml
+# against schema/settings.schema.json.
+taplo = "latest"
+# Swift toolchain. Pinned exact to match Package.swift's swift-testing dep
+# (6.3.1). The swift.org toolchain ships _TestingInterop, which the slim
+# /Library/Developer/CommandLineTools install omits — so without this pin,
+# `swift test` fails to link on macOS CLT-only machines.
+swift = "6.3.1"

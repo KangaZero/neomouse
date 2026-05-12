@@ -1,5 +1,5 @@
 {
-  "originHash" : "11abb9fc1ef75137437ff3b85eb91048e422c7cf8806c0749c6c81f5a18df0ab",
+  "originHash" : "0316a20ba5af87ea6d14e2b55f7d1eeca25a40e838c11e59d5da39aca4dc7552",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,6 +8,33 @@
       "state" : {
         "revision" : "36e30a6f1ef10e4194f6af0cff90888526f0c115",
         "version" : "7.10.0"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "9de99a78f099e59caf2b2beec65a4c45d54b2081",
+        "version" : "603.0.1"
+      }
+    },
+    {
+      "identity" : "swift-testing",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-testing",
+      "state" : {
+        "revision" : "937120cbc281cf29727fdfb8734482158508b4fc",
+        "version" : "6.3.1"
+      }
+    },
+    {
+      "identity" : "tomldecoder",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/dduan/TOMLDecoder",
+      "state" : {
+        "revision" : "fa1103a62b1c08cc08eabc58dda8b55887ff1622",
+        "version" : "0.4.4"
       }
     }
   ],

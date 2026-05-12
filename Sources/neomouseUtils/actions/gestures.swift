@@ -1,10 +1,10 @@
 // MARK: - Gestures
 import AppKit
 
-enum ZoomDirection { case `in`, out }
-enum SwipeDirection { case left, right, up, down }
+public enum ZoomDirection { case `in`, out }
+public enum SwipeDirection { case left, right, up, down }
 
-func pinchZoom(
+public func pinchZoom(
     _ direction: ZoomDirection, at point: CGPoint, stepValue: Double,
     incrementsPerGesture: UInt
 ) {
@@ -35,14 +35,14 @@ func pinchZoom(
     postGestureEvent(src: src, type: .magnify, value: 0, phase: .ended, at: point)
 }
 
-func smartMagnify(at point: CGPoint) {
+public func smartMagnify(at point: CGPoint) {
     let src = makeHIDEventSource()
     postGestureEvent(src: src, type: .smartMagnify, value: 0, phase: .began, at: point)
     usleep(8000)
     postGestureEvent(src: src, type: .smartMagnify, value: 0, phase: .ended, at: point)
 }
 
-func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {
+public func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {
     var safeIncrementsPerGesture = incrementsPerGesture
     if safeIncrementsPerGesture == 0 {
         print(
@@ -62,7 +62,7 @@ func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {
     postGestureEvent(src: src, type: .rotate, value: 0, phase: .ended, at: point)
 }
 
-func swipe(_ direction: SwipeDirection, at point: CGPoint) {
+public func swipe(_ direction: SwipeDirection, at point: CGPoint) {
     let src = makeHIDEventSource()
 
     let (dx, dy): (Double, Double) =

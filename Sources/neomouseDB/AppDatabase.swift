@@ -1,6 +1,8 @@
 import Foundation
 import GRDB
 
+import neomouseUtils
+
 let dbPath = FileManager.default.temporaryDirectory.appendingPathComponent("neomouse.sqlite").path
 let dbQueue: DatabaseQueue = {
     do {
@@ -20,7 +22,7 @@ enum OperationName: String, Codable, DatabaseValueConvertible {
         scrollDown, scrollLeft, scrollRight
 }
 
-func initializeDB(forceReSeed: Bool) {
+public func initializeDB(forceReSeed: Bool) {
     do {
         try dbQueue.write { db in
             let isTablesExist =
