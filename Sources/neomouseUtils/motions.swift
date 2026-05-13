@@ -51,12 +51,12 @@ public enum MotionTarget {
         localX: CGFloat,
         screenHeight: CGFloat,
         gridInset: CGFloat,
-        linesOnScreen: CGFloat,
+        linesOnScreen: Int,
         count: CGFloat
     ) -> CGPoint {
         CGPoint(
             x: localX,
-            y: (screenHeight - gridInset) / linesOnScreen * count
+            y: (screenHeight - gridInset) / CGFloat(linesOnScreen) * count
         )
     }
 }

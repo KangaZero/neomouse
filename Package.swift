@@ -41,7 +41,7 @@ let package = Package(
         ),
         .target(
             name: "neomouseUtils",
-            dependencies: [],
+            dependencies: ["neomouseTypes"],
             path: "Sources/neomouseUtils",
         ),
         .target(
@@ -51,6 +51,11 @@ let package = Package(
                 .product(name: "TOMLDecoder", package: "TOMLDecoder"),
             ],
             path: "Sources/neomouseConfig",
+        ),
+        .target(
+            name: "neomouseTypes",
+            dependencies: [],
+            path: "Sources/neomouseTypes",
         ),
         .testTarget(
             name: "neomouseTests",

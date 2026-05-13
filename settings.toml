@@ -19,13 +19,14 @@ find_mode_inner_characters = "abcdefghijklmnopqrstuvwxyz"
 is_always_show_inner_characters = true
 
 [motion]
-lines_on_screen = 50.0
+lines_on_screen = 50
 range_x = 20.0
 range_y = 20.0
 is_clamp_cursor_to_current_screen = false
 
 [visual]
 minimum_highlight_width = 5
+mouse_event_on_visual = "" #Options: "" ,"leftMouseDown", "rightMouseDown"
 
 [gesture]
 zoom_step_value = 0.1      # 0.01 .. 10

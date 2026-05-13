@@ -30,7 +30,7 @@ class NeoMouseState: ObservableObject {
     let innerGridDivisions: Int
     let findModeGridDivisionCharacters: [String]
     let findModeInnerGridDivisionCharacters: [String]
-    let linesOnScreen: CGFloat
+    let linesOnScreen: Int
     let minimumHighlightWidth: Int
     let rangeX: CGFloat
     let rangeY: CGFloat
@@ -361,7 +361,7 @@ struct NeoMouse: App {
                                     VisualHighlightOverlay.shared)
                             return
                         }
-                        let lineHeight = currentScreenSize.height / appState.linesOnScreen
+                        let lineHeight = currentScreenSize.height / CGFloat(appState.linesOnScreen)
                         let startCGPoint = CGPoint(
                             x: currentDisplayBounds.origin.x + appState.gridInset,
                             y: currentCGPoint.y)
@@ -455,12 +455,16 @@ struct NeoMouse: App {
                                     return
                                 }
                                 let image = NSImage(cgImage: screenshotTaken, size: .zero)
+                                NSSound(named: "Screen Capture")?.play()
                                 NSPasteboard.general.clearContents()
-                                NSPasteboard.general.writeObjects([image])
+                                let isCopiedToPasteBoard = NSPasteboard.general.writeObjects([image])
+                                if isCopiedToPasteBoard {
+                                    ToastManager.shared.show("Screenshot copied to clipboard")
+                                }
                                 appState.mode = .normal(currentPendingOperation: nil)
                                 appState.isVisual = false
                             } catch {
-                                debug("screenshot failed: \(error)")
+                                debug("For operation 'y' screenshot failed: \(error)")
                                 appState.mode = .normal(currentPendingOperation: nil)
                                 appState.isVisual = false
                             }

@@ -30,32 +30,38 @@
         "inset": {
           "type": "number",
           "minimum": 0,
+          "default": 10.0,
           "description": "Pixels between the grid bounds and the screen edges."
         },
         "divisions": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 26,
+          "maximum": 10,
+          "default": 5,
           "description": "Outer grid cells per axis. Capped at 26 (alphabet length)."
         },
         "inner_divisions": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 26,
+          "maximum": 10,
+          "default": 3,
           "description": "Inner grid cells per axis within a selected outer cell."
         },
         "find_mode_characters": {
           "type": "string",
           "pattern": "^[a-z]+$",
+          "default": "abcdefghijklmnopqrstuvwxyz",
           "description": "Outer-cell labels. Length must be >= divisions^2."
         },
         "find_mode_inner_characters": {
           "type": "string",
           "pattern": "^[a-z]+$",
+          "default": "abcdefghijklmnopqrstuvwxyz",
           "description": "Inner-cell labels. Length must be >= inner_divisions^2."
         },
         "is_always_show_inner_characters": {
           "type": "boolean",
+          "default": true,
           "description": "Render inner-cell labels alongside outer labels at first keypress."
         }
       }
@@ -72,22 +78,26 @@
       ],
       "properties": {
         "lines_on_screen": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Vertical resolution used by `gg`/`G`/count-prefixed motions."
+          "type": "integer",
+          "exclusiveMinimum": 0, // greater than 0
+          "default": 50,
+          "description": "Applies to per display. Vertical resolution used by `gg`/`G`/count-prefixed motions."
         },
         "range_x": {
           "type": "number",
-          "minimum": 0,
+          "exclusiveMinimum": 0,
+          "default": 20,
           "description": "Pixels moved per `h`/`l` step."
         },
         "range_y": {
           "type": "number",
-          "minimum": 0,
+          "exclusiveMinimum": 0,
+          "default": 20,
           "description": "Pixels moved per `j`/`k` step."
         },
         "is_clamp_cursor_to_current_screen": {
           "type": "boolean",
+          "default": false,
           "description": "If true, hjkl motions stay within the active display."
         }
       }
@@ -100,8 +110,15 @@
       "properties": {
         "minimum_highlight_width": {
           "type": "integer",
-          "minimum": 0,
+          "minimum": 1,
+          "default": 5,
           "description": "Floor pixel width below which the highlight is suppressed."
+        }
+    "mouse_event_on_visual": {
+          "type": "string",
+          "default": "", // null does not exist in toml; so an empty string is used instead
+          "pattern": "^(|leftMouseDown|rightMouseDown)$",
+          "description": "The mouse event to fire when going into visual state, by default no mouse event is fired."
         }
       }
     },
@@ -144,7 +161,7 @@
           "description": "Whitelist of commands. Must match the `Command` enum in mode.swift.",
           "items": {
             "type": "string",
-            "enum": ["numbers", "relativenumbers"]
+            "enum": ["numbers", "relativenumbers", "delmarks"]
           }
         }
       }

@@ -28,7 +28,7 @@ public struct Config: Decodable, Sendable {
     }
 
     public struct Motion: Decodable, Sendable {
-        public let linesOnScreen: CGFloat
+        public let linesOnScreen: Int
         public let rangeX: CGFloat
         public let rangeY: CGFloat
         public let isClampCursorToCurrentScreen: Bool

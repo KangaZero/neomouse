@@ -16,7 +16,7 @@ public func makeHIDEventSource() -> CGEventSource? {
 // event whose mouseCursorPosition relocates the cursor as part of dispatch — replaces
 // CGWarpMouseCursorPosition so observers of the event stream (overlay listeners,
 // accessibility tools, target apps) see the move.
-public func moveMouseByExactGlobalCGPoint(x: CGFloat, y: CGFloat) {
+public func moveMouseByExactGlobalCGPoint(x: CGFloat, y: CGFloat, mouseFunction: (() -> Void)? = nil) {
     let point = CGPoint(x: x, y: y)
     let src = makeHIDEventSource()
     let leftDown = CGEventSource.buttonState(.hidSystemState, button: .left)
