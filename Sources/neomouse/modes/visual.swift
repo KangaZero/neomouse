@@ -26,6 +26,7 @@ func exitVisualMode(appState: NeoMouseState, visualHighlightOverlay: VisualHighl
     appState.endCGYPoint = nil
     visualHighlightOverlay.hideOverlay()
     appState.mode = .normal(
-        currentPendingOperation: nil
+        currentPendingOperation: .none
     )
+    appState.operationCountAsString = nil
 }

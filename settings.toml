@@ -36,3 +36,27 @@ degrees_to_rotate = 90.0
 [commands]
 # Commands exposed in command-line mode.
 available = ["numbers", "relativenumbers", "delmarks"]
+
+[configuration]
+max_session_count = 10
+#
+# [keymap]
+# # Motion keys. "modifier + key(s)" 
+# # key(s) can be a case-sensitive single char or a key name like "Enter", "Space", "Tab", "Backspace", "Delete", "UpArrow", "down", "left", "right"
+# # modifier: "ctrl", "control", "option", "alt", "shift", "cmd", "command"
+# # "ctrl" and "control" are the same, as are "option" and "alt". "cmd" or "command" is the Command key on Mac.
+# # eg "ctrl + h" or "alt + ctrl + h"
+# #
+# # numbers cannot be used
+# motion_x_minus = "h"
+# motion_y_minus = "j"
+# motion_x_plus = "k"
+# motion_y_plus = "l"
+#
+# motion_x_min = "0" # This is only exception
+# motion_x_max = "$"
+# motion_y_min = "G" # also same as shift + g
+# motion_y_max = "gg" 
+#
+#
+

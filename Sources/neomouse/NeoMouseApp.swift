@@ -14,14 +14,12 @@ class NeoMouseState: ObservableObject {
     @Published var previousVisualStartCGYPoint: CGFloat? = nil
     @Published var previousVisualEndCGXPoint: CGFloat? = nil
     @Published var previousVisualEndCGYPoint: CGFloat? = nil
-    // @Published var previousStartCGXPoint: CGFloat? = nil
-    // @Published var previousStartCGYPoint: CGFloat? = nil
-    // @Published var previousEndCGXPoint: CGFloat? = nil
-    // @Published var previousEndCGYPoint: CGFloat? = nil
     @Published var startCGXPoint: CGFloat? = nil
     @Published var startCGYPoint: CGFloat? = nil
     @Published var endCGXPoint: CGFloat? = nil
     @Published var endCGYPoint: CGFloat? = nil
+
+    @Published var operationCountAsString: String? = nil
     @Published var currentSession: Session? = nil
 
     let commands: [String]
@@ -132,19 +130,20 @@ struct NeoMouse: App {
                 )
                 //INFO: Set as a CGFloat instead of Double or UInt as to be compatible with
                 //CGWarpMouseCursorPosition
-                var operationCount: CGFloat = 1
-                if case .normal(let currentPendingNormalOperation) = appState.mode,
-                    let currentPendingNormalOperation,
-                    let currentPendingNormalOperationAsFloat =
+                let operationCount: CGFloat
+                if case .normal = appState.mode,
+                    let operationCountAsString = appState.operationCountAsString,
+                    let currentPendingNormalOperationAsFloat: Float =
                         Float(
-                            currentPendingNormalOperation.filter {
+                            operationCountAsString.filter {
                                 $0.isNumber || $0 == "."
                             },
-
                         ),
-                    currentPendingNormalOperationAsFloat != 0
+                    currentPendingNormalOperationAsFloat > 0
                 {
                     operationCount = CGFloat(currentPendingNormalOperationAsFloat)
+                } else {
+                    operationCount = 1
                 }
                 let _key = keyCodeToCharMap.first(where: { $0.value == event.keyCode })?.key ?? "?"
                 debug(
@@ -172,8 +171,7 @@ struct NeoMouse: App {
                             return
                         }
                         appState.mode = .normal(
-                            //TODO get session's last mode and pending operation and set to that instead of always resetting to normal mode with no pending operation
-                            currentPendingOperation: nil,
+                            currentPendingOperation: .none
                         )
                         ToastManager.shared.show(
                             "Neomouse Activated - Normal Mode")
@@ -194,7 +192,7 @@ struct NeoMouse: App {
                                     VisualHighlightOverlay.shared)
                         }
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     default: break
@@ -202,7 +200,7 @@ struct NeoMouse: App {
                     // Second keystroke after "m": save current cursor as a mark.
                     // Intercepts here so letters like "v"/"g" don't fall through to
                     // their normal handlers when armed by a preceding "m".
-                    if currentPendingNormalOperation == "m",
+                    if currentPendingNormalOperation == .setMark,
                         event.modifierFlags.rawValue == 256,
                         let markChar = event.characters,
                         markChar.count == 1,
@@ -216,21 +214,22 @@ struct NeoMouse: App {
                             startCGYPoint: Double(currentCGPoint.y),
                             endCGXPoint: Double(currentCGPoint.x),
                             endCGYPoint: Double(currentCGPoint.y),
-                            sessionId: 1  // TODO thread current session id through NeoMouseState
+                            sessionId: appState.currentSession?.id ?? 1
                         )
                         ToastManager.shared.show("Mark '\(markChar)' set")
-                        appState.mode = .normal(currentPendingOperation: nil)
+                        appState.mode = .normal(currentPendingOperation: .none)
+                        //INFO: Return early here to avoid the mark char being processed by the normal flow below, which could cause unintended behavior (eg.. "mm" would trigger both the mark setting and the "go to start of line" behavior)
                         return
                     }
                     switch event.characters {
                     case "e":
+                        appState.operationCountAsString = nil
                         guard
                             event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                                 == .command
                         else {
-
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
                         //TODO make this into a reusable fn disableNeoMouse
@@ -247,13 +246,11 @@ struct NeoMouse: App {
                     //TODO: Add "$", "^ : where it will go to the most left/right of the current
                     //focused window", "g$" for most right, hjkl, counters,
                     case "f":
-                        // debug(
-                        //     "modifierFlags:\(event.modifierFlags.rawValue), isNeomouseMode:true, key:f, keyCode:\(event.keyCode) - not activating find mode because modifier is pressed"
-                        // )
+                        appState.operationCountAsString = nil
                         //INFO: 256 means no modifier is pressed, do not use .isEmpty method
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
                         appState.mode = .find(
@@ -274,7 +271,7 @@ struct NeoMouse: App {
                             let direction = HJKLDirection(key)
                         else {
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
                         let delta = direction.delta(
@@ -286,7 +283,7 @@ struct NeoMouse: App {
                             enableClampToCurrentScreen:
                                 appState.isClampCursorToCurrentScreen)
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     //INFO: No need to do modifierFlags checks for captizalized chars, as a
@@ -301,14 +298,17 @@ struct NeoMouse: App {
                     case "g":
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
-                        appState.mode = .normal(
-                            currentPendingOperation: (currentPendingNormalOperation ?? "") + "g",
-                        )
+                        if currentPendingNormalOperation == .none {
+                            appState.mode = .normal(
+                                currentPendingOperation: .g
+                            )
+                            break
+                        }
                         // "g" instead of "gg" as the following "g" is only appended/updated onto appState after current MainActor event
-                        if operationCount > 0 && currentPendingNormalOperation?.last == "g" {
+                        if operationCount > 0 && currentPendingNormalOperation == .g {
                             let target = MotionTarget.toLineCount(
                                 localX: localCGPoint.x,
                                 screenHeight: currentScreenSize.height,
@@ -317,43 +317,44 @@ struct NeoMouse: App {
                                 count: operationCount)
                             moveMouseByExactCoordinatesOnCurrentScreen(x: target.x, y: target.y)
                             appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
+                            appState.operationCountAsString = nil
                             break
-                        } else if currentPendingNormalOperation == "g" {
+                        } else if currentPendingNormalOperation == .g {
                             let target = MotionTarget.top(
                                 localX: localCGPoint.x,
                                 gridInset: appState.gridInset)
                             moveMouseByExactCoordinatesOnCurrentScreen(x: target.x, y: target.y)
                             appState.mode = .normal(
-                                currentPendingOperation: "gg",
+                                currentPendingOperation: .gg
                             )
                             //TODO dont reset normal mode just yet, need to account for ggvG
                             //TODO Remove below when v is added
-                            appState.mode = .normal(
-                                currentPendingOperation: nil
-                            )
+                            // appState.mode = .normal(
+                            //     currentPendingOperation: .none
+                            // )
                             break
                         }
                         break
                     case "w", "W", "\u{17}":
-                        if currentPendingNormalOperation == "Ctrl w" {
+                        if currentPendingNormalOperation == .ctrlW {
                             guard let adjacentScreenRect = getAdjacentScreenRect() else {
                                 debug("No adjacent screen found for Ctrl-w w")
-                                appState.mode = .normal(currentPendingOperation: nil)
+                                appState.mode = .normal(currentPendingOperation: .none)
                                 break
                             }
                             debug("\(adjacentScreenRect), adj")
                             moveMouseByExactGlobalCGPoint(
                                 x: adjacentScreenRect.midX,
                                 y: adjacentScreenRect.midY)
-                            appState.mode = .normal(currentPendingOperation: nil)
+                            appState.mode = .normal(currentPendingOperation: .none)
                         } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                             == .control
                         {
-                            appState.mode = .normal(currentPendingOperation: "Ctrl w")
+                            appState.mode = .normal(currentPendingOperation: .ctrlW)
                         } else {
-                            appState.mode = .normal(currentPendingOperation: nil)
+                            appState.mode = .normal(currentPendingOperation: .none)
                         }
                         break
                     case "V":
@@ -374,7 +375,7 @@ struct NeoMouse: App {
                                 - appState.gridInset,
                             y: currentCGPoint.y + lineHeight)
                         moveMouseByExactGlobalCGPoint(x: startCGPoint.x, y: startCGPoint.y)
-                        mouseDown(.left, at: startCGPoint)
+                        // mouseDown(.left, at: startCGPoint)
                         moveMouseByExactGlobalCGPoint(x: endCGPoint.x, y: endCGPoint.y)
                         appState.startCGXPoint = startCGPoint.x
                         appState.startCGYPoint = startCGPoint.y
@@ -383,8 +384,9 @@ struct NeoMouse: App {
                         VisualHighlightOverlay.shared.passAppState(state: appState)
                         break
                     case "v":
+                        appState.operationCountAsString = nil
                         guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(currentPendingOperation: nil)
+                            return appState.mode = .normal(currentPendingOperation: .none)
                         }
                         appState.isVisual.toggle()
                         guard appState.isVisual else {
@@ -394,13 +396,13 @@ struct NeoMouse: App {
                                     VisualHighlightOverlay.shared)
                             return
                         }
-                        if currentPendingNormalOperation == "g"
+                        if currentPendingNormalOperation == .g
                             && appState.previousVisualStartCGXPoint != nil
                             && appState.previousVisualStartCGYPoint != nil
                             && appState.previousVisualEndCGXPoint != nil
                             && appState.previousVisualEndCGYPoint != nil
                         {
-                            mouseDown(.left, at: currentCGPoint)
+                            // mouseDown(.left, at: currentCGPoint)
                             appState.startCGXPoint = appState.previousVisualStartCGXPoint
                             appState.startCGYPoint = appState.previousVisualStartCGYPoint
                             appState.endCGXPoint = appState.previousVisualEndCGXPoint
@@ -409,19 +411,20 @@ struct NeoMouse: App {
                             moveMouseByExactGlobalCGPoint(
                                 x: appState.endCGXPoint!,
                                 y: appState.endCGYPoint!)
-                            appState.mode = .normal(currentPendingOperation: nil)
+                            appState.mode = .normal(currentPendingOperation: .none)
                         } else {
                             //Go to Visual state
-                            mouseDown(.left, at: currentCGPoint)
+                            // mouseDown(.left, at: currentCGPoint)
                             appState.startCGXPoint = currentCGPoint.x
                             appState.startCGYPoint = currentCGPoint.y
                             appState.endCGXPoint = currentCGPoint.x
                             appState.endCGYPoint = currentCGPoint.y
                             VisualHighlightOverlay.shared.passAppState(state: appState)
-                            appState.mode = .normal(currentPendingOperation: nil)
+                            appState.mode = .normal(currentPendingOperation: .none)
                         }
                         break
                     case "y":
+                        appState.operationCountAsString = nil
                         guard
                             event.modifierFlags.rawValue == 256,
                             appState.isVisual,
@@ -430,17 +433,14 @@ struct NeoMouse: App {
                             let endX = appState.endCGXPoint,
                             let endY = appState.endCGYPoint
                         else {
-                            appState.mode = .normal(currentPendingOperation: nil)
+                            appState.mode = .normal(currentPendingOperation: .none)
                             return
                         }
                         let currentVisualHighlightWidth: CGFloat = abs(endX - startX)
                         let currentVisualHighlightHeight: CGFloat = abs(endY - startY)
-                        let unionOrigin = getAllScreensBoundingRect().origin
-                        let originX = min(startX, endX) - unionOrigin.x
-                        let originY = min(startY, endY) - unionOrigin.y
                         let currentVisualHighlightCGRect = CGRect(
-                            x: originX,
-                            y: originY,
+                            x: min(startX, endX),
+                            y: min(startY, endY),
                             width: currentVisualHighlightWidth,
                             height: currentVisualHighlightHeight
                         )
@@ -451,10 +451,12 @@ struct NeoMouse: App {
                         ].compactMap { $0 }
                         Task { @MainActor in
                             do {
-                                guard let screenshotTaken = try await screenshot(rect: rect, excluding: excludedIDs)
+                                guard
+                                    let screenshotTaken = try await screenshotMultiDisplay(
+                                        rect: rect, excluding: excludedIDs)
                                 else {
                                     debug("No screenshotTaken for operation: y")
-                                    appState.mode = .normal(currentPendingOperation: nil)
+                                    appState.mode = .normal(currentPendingOperation: .none)
                                     appState.isVisual = false
                                     return
                                 }
@@ -465,23 +467,24 @@ struct NeoMouse: App {
                                 if isCopiedToPasteBoard {
                                     ToastManager.shared.show("Screenshot copied to clipboard")
                                 }
-                                appState.mode = .normal(currentPendingOperation: nil)
+                                appState.mode = .normal(currentPendingOperation: .none)
                                 appState.isVisual = false
                             } catch {
                                 debug("For operation 'y' screenshot failed: \(error)")
-                                appState.mode = .normal(currentPendingOperation: nil)
+                                appState.mode = .normal(currentPendingOperation: .none)
                                 appState.isVisual = false
                             }
                         }
                         break
                     case "o", "O":
+                        appState.operationCountAsString = nil
                         guard appState.isVisual,
                             let sx = appState.startCGXPoint,
                             let sy = appState.startCGYPoint,
                             let ex = appState.endCGXPoint,
                             let ey = appState.endCGYPoint
                         else {
-                            return appState.mode = .normal(currentPendingOperation: nil)
+                            return appState.mode = .normal(currentPendingOperation: .none)
                         }
                         // Pure anchor↔cursor swap. The mouse monitor is the single source
                         // of truth for endCG* — after the cursor warp dispatches, it'll
@@ -492,37 +495,39 @@ struct NeoMouse: App {
                         appState.endCGXPoint = sx
                         appState.endCGYPoint = sy
                         moveMouseByExactGlobalCGPoint(x: sx, y: sy)
-                        appState.mode = .normal(currentPendingOperation: nil)
+                        appState.mode = .normal(currentPendingOperation: .none)
                         break
                     case "M":
+                        appState.operationCountAsString = nil
                         let target = MotionTarget.verticalMiddle(
                             localX: localCGPoint.x,
                             screenHeight: currentScreenSize.height)
                         moveMouseByExactCoordinatesOnCurrentScreen(x: target.x, y: target.y)
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     case "m":
+                        appState.operationCountAsString = nil
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
 
-                        if currentPendingNormalOperation == nil {
+                        if currentPendingNormalOperation == .none {
                             // First press: arm "m" so the next key becomes the mark name.
                             // The actual addMark call lives at the top of the outer
                             // `switch event.characters` so it can intercept any a–z/0–9.
-                            appState.mode = .normal(currentPendingOperation: "m")
+                            appState.mode = .normal(currentPendingOperation: .m)
                             break
-                        } else if currentPendingNormalOperation == "g" {
+                        } else if currentPendingNormalOperation == .g {
                             let target = MotionTarget.horizontalMiddle(
                                 localY: localCGPoint.y,
                                 screenWidth: currentScreenSize.width)
                             moveMouseByExactCoordinatesOnCurrentScreen(x: target.x, y: target.y)
                             appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                             break
                         }
@@ -533,7 +538,7 @@ struct NeoMouse: App {
                     case "r":
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
                         rotate(
@@ -541,7 +546,7 @@ struct NeoMouse: App {
                             incrementsPerGesture:
                                 appState.incrementsPerGesture)
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     case "R":
@@ -551,29 +556,24 @@ struct NeoMouse: App {
                                 appState.incrementsPerGesture)
                         // Always reset pendingOperation as to reset the operationCount
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     //TODO change to current focused app and add in for g0
                     case "0":
                         guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: nil
-                            )
+                            return appState.mode = .normal(currentPendingOperation: .none)
                         }
                         //Not a count-based operation, so execute "go to start of current
                         //x-axis-line (Similar to Vim's go to start of line)
                         guard
-                            currentPendingNormalOperation == nil
+                            currentPendingNormalOperation == .none,
+                            appState.operationCountAsString == nil
                         else {
-                            debug(
-                                ""
-                            )
-                            appState.mode = .normal(
-                                currentPendingOperation: (currentPendingNormalOperation ?? "") + "0",
-                            )
-                            //TODO: Add to counter operation
-                            break
+                            appState.operationCountAsString =
+                                (appState.operationCountAsString ?? "") + event.characters!
+                            appState.mode = .normal(currentPendingOperation: .none)
+                            return
                         }
                         let target = MotionTarget.leftEdge(
                             localY: localCGPoint.y,
@@ -582,14 +582,12 @@ struct NeoMouse: App {
                     case "1", "2", "3", "4", "5", "6", "7", "8", "9":
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
-                                currentPendingOperation: nil
+                                currentPendingOperation: .none
                             )
                         }
-                        appState.mode = .normal(
-                            currentPendingOperation: (currentPendingNormalOperation ?? "")
-                                + event.characters!
-                        )
-                        break
+                        appState.operationCountAsString = (appState.operationCountAsString ?? "") + event.characters!
+                        appState.mode = .normal(currentPendingOperation: .none)
+                        return
                     // TODO change to current focused app and add in for g$
                     case "$":
                         let target = MotionTarget.rightEdge(
@@ -598,7 +596,7 @@ struct NeoMouse: App {
                             gridInset: appState.gridInset)
                         moveMouseByExactCoordinatesOnCurrentScreen(x: target.x, y: target.y)
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     case "+":
@@ -607,7 +605,7 @@ struct NeoMouse: App {
                             stepValue: operationCount * appState.zoomStepValue,
                             incrementsPerGesture: appState.incrementsPerGesture)
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     case "-":
@@ -616,7 +614,7 @@ struct NeoMouse: App {
                             stepValue: operationCount * appState.zoomStepValue,
                             incrementsPerGesture: appState.incrementsPerGesture)
                         appState.mode = .normal(
-                            currentPendingOperation: nil
+                            currentPendingOperation: .none
                         )
                         break
                     default: break
@@ -652,22 +650,6 @@ struct NeoMouse: App {
                         GridOverlay.shared.hideGrid()
                         ToastManager.shared.show("NeoMouse Deactivated")
                         return
-
-                    // case keyCodeToCharMap["f"]:
-                    //     guard event.modifierFlags.isEmpty else { return }
-                    //     debug(
-                    //         "modifierFlags:false, modifier: \(event.modifierFlags), isNeomouseMode:\(appState.isNeomouseMode), key:f, keyCode:\(event.keyCode)"
-                    //     )
-                    //     if !appState.isFindMode {
-                    //         appState.isFindMode.toggle()
-                    //         GridOverlay.shared.passAppState(state: appState)
-                    //         GridOverlay.shared.toggle()
-                    //         ToastManager.shared.show(
-                    //             "Find Mode \(appState.isFindMode ? "On" : "Off")")
-                    //     } else {
-                    //         NeoMouse.executeFindModeOperation(event: event, appState: appState)
-                    //     }
-                    //
                     default:
                         NeoMouse.executeFindModeOperation(
                             event: event, appState: appState, currentScreenSize: currentScreenSize)
@@ -677,6 +659,14 @@ struct NeoMouse: App {
                     debug(
                         "Should not happen: Reached default case in keyMonitor with mode:\(appState.mode) and keyCode:\(event.keyCode)"
                     )
+                    break
+                }
+                //INFO: after every non-integer keypress, excluding 0 which can be both a command and a count, we reset the operationCountAsString to nil to reset the count for the next operation
+                //Non-integer keypress generally needs to break at the end, while integer keypress will return early before reaching this point, so the operationCountAsString is only updated for integer keypress and reset for non-integer keypress
+                switch appState.mode {
+                case .normal(.none), .find:
+                    appState.operationCountAsString = nil
+                default:
                     break
                 }
             }
@@ -697,7 +687,7 @@ struct NeoMouse: App {
     }
     static func enterNormalMode(appState: NeoMouseState) {
         //TODO: NICE TO HAVE use previous session's
-        appState.mode = .normal(currentPendingOperation: nil)
+        appState.mode = .normal(currentPendingOperation: .none)
         GridOverlay.shared.hideGrid()
         ToastManager.shared.show(
             "Normal Mode")

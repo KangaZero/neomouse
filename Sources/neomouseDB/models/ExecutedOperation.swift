@@ -15,7 +15,7 @@ public enum MotionOperationType: Equatable, Codable, DatabaseValueConvertible {
         motionXMin,  //0
         motionXMax,  //$
         motionYMin,  //G
-        motionYMax,  //g
+        motionYMax,  //gg
         motionXMid,  //gm
         motionYMid  //M
 }
@@ -56,6 +56,9 @@ public enum OperationName: Equatable, Codable, DatabaseValueConvertible {
         MouseOperationType(MouseOperationType),
         TrackpadOperationType(TrackpadOperationType),
         //Custom Operations that don't map directly to a single CGEventType or gesture, but are still useful to track for analysis and recommendations. For example, setting a mark and going to a mark are fundamental Vim operations that can be performed with different keys and in different modes, but they don't have a direct mapping to a single CGEventType or gesture. By defining custom operation types for these actions, we can capture them in our data model and use that information for analysis and recommendations.
+        toggleNeomouse,
+        Esc,
+        goToPreviousVisualPosition,  // `gv` in normal mode.
         setMark,
         goToMark,
         jumpAdjacentScreen,
@@ -116,7 +119,7 @@ public func getExecutedOperationsBySessionId(sessionId: Int64) -> [ExecutedOpera
 }
 
 public func getSingleExecutedOperationByIdAndSessionId(
-id: Int64,
+    id: Int64,
     sessionId: Int64
 ) -> ExecutedOperation? {
     do {
@@ -160,7 +163,7 @@ public func setExecutedOperation(
     keysUsed: String,
     mode: ModeName,
     sessionId: Int64
-){
+) {
     do {
         try dbQueue.write { db in
             var newExecutedOperation = ExecutedOperation(
@@ -188,11 +191,12 @@ public func deleteExecutedOperation(
 ) {
     do {
         try dbQueue.write { db in
-            guard let existing =
-                try ExecutedOperation
-                .filter(ExecutedOperation.Columns.sessionId == sessionId)
-                .filter(ExecutedOperation.Columns.id == id)
-                .fetchOne(db)
+            guard
+                let existing =
+                    try ExecutedOperation
+                    .filter(ExecutedOperation.Columns.sessionId == sessionId)
+                    .filter(ExecutedOperation.Columns.id == id)
+                    .fetchOne(db)
             else {
                 return debug("Cannot find existing executed operation to delete")
             }

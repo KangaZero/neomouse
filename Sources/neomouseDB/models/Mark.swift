@@ -33,9 +33,9 @@ public struct Mark: Codable, Identifiable, FetchableRecord, MutablePersistableRe
 }
 
 public func getMark(
-        mark: String,
-        sessionId: Int64
-        ) -> Mark? {
+    mark: String,
+    sessionId: Int64
+) -> Mark? {
     do {
         return try dbQueue.read { db in
             try Mark

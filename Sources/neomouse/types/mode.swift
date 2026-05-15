@@ -12,8 +12,9 @@ struct VisualState: Codable {
 
 public enum NormalModePendingOperation: Equatable {
     case none
-    case count(Int)  // numeric prefix being assembled (e.g. "10" → 10)
+    case m
     case g  // `g` pressed once, awaiting completion
+    case gg  // `gg`
     case ctrlW  // Ctrl-w pressed, awaiting window command
     case setMark  // `m` pressed, awaiting mark name
     case goToMark  // `'` pressed, awaiting set mark to go to
@@ -27,7 +28,7 @@ public enum NormalModePendingOperation: Equatable {
 enum Mode {
     case disabled
     case normal(
-        currentPendingOperation: String?,
+        currentPendingOperation: NormalModePendingOperation,
         //TODO change to below
         // currentPendingOperation: NormalModePendingOperation,
     )
