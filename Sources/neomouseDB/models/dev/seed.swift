@@ -38,7 +38,7 @@ func seedMark(numberOfMarks: Int = 5) {
                 let endX = Double.random(in: 0...currentScreen.width)
                 let endY = Double.random(in: 0...currentScreen.height)
                 let isVisual = Int.random(in: 1..<2) == 1 ? true : false
-                setMark(
+                Mark.set(
                     mark: markCharacters[i],
                     isVisual: isVisual,
                     startCGXPoint: isVisual ? startX : nil,

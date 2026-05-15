@@ -13,9 +13,9 @@ struct VisualState: Codable {
 
 public enum NormalModePendingOperation: Equatable {
     case none
-    case m
     case g  // `g` pressed once, awaiting completion
     case gg  // `gg`
+    case ggv  // for select all similar to vim's `ggVG`
     case ctrlW  // Ctrl-w pressed, awaiting window command
     case setMark  // `m` pressed, awaiting mark name
     // `'` pressed, awaiting set mark to go to exact location. Similar to vim `

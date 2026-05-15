@@ -22,75 +22,75 @@ public struct Macro: Codable, Identifiable, FetchableRecord, MutablePersistableR
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }
-}
 
-public func getMacro(
-    macro: String,
-    sessionId: Int64
-) -> Macro? {
-    do {
-        return try dbQueue.read { db in
-            try Macro
-                .filter(Macro.Columns.sessionId == sessionId)
-                .filter(Macro.Columns.macro == macro)
-                .fetchOne(db)
-        }
-    } catch {
-        debug("getMacro error: ", error)
-        return nil
-    }
-}
-
-public func setMacro(
-    macro: String,
-    sessionId: Int64,
-    keysUsedToSet: String
-) {
-    do {
-        try dbQueue.write { db in
-            if var existing =
+    public static func get(
+        macro: String,
+        sessionId: Int64
+    ) -> Macro? {
+        do {
+            return try dbQueue.read { db in
                 try Macro
-                .filter(Macro.Columns.sessionId == sessionId)
-                .filter(Macro.Columns.macro == macro)
-                .fetchOne(db)
-            {
-                debug("Overwritting existing macro in fn setMacro")
-                existing.keysUsed = keysUsedToSet
-                try existing.update(db)
-            } else {
-                debug("Creating new macro in fn setMacro")
-                var newMacro = Macro(
-                    macro: macro,
-                    keysUsed: keysUsedToSet,
-                    createdAt: Date(),
-                    sessionId: sessionId
-                )
-                try newMacro.insert(db)
+                    .filter(Macro.Columns.sessionId == sessionId)
+                    .filter(Macro.Columns.macro == macro)
+                    .fetchOne(db)
             }
+        } catch {
+            debug("Macro - get error: ", error)
+            return nil
         }
-    } catch {
-        debug("setMacro error: ", error)
     }
-}
 
-public func deleteMacro(
-    macro: String,
-    sessionId: Int64
-) {
-    do {
-        try dbQueue.write { db in
-            guard
-                let existing =
+    public static func set(
+        macro: String,
+        sessionId: Int64,
+        keysUsedToSet: String
+    ) {
+        do {
+            try dbQueue.write { db in
+                if var existing =
                     try Macro
                     .filter(Macro.Columns.sessionId == sessionId)
                     .filter(Macro.Columns.macro == macro)
                     .fetchOne(db)
-            else {
-                return debug("Cannot find existing macro to delete")
+                {
+                    debug("Macro - set: Overwritting existing macro")
+                    existing.keysUsed = keysUsedToSet
+                    try existing.update(db)
+                } else {
+                    debug("Macro - set: Creating new macro")
+                    var newMacro = Macro(
+                        macro: macro,
+                        keysUsed: keysUsedToSet,
+                        createdAt: Date(),
+                        sessionId: sessionId
+                    )
+                    try newMacro.insert(db)
+                }
             }
-            try existing.delete(db)
+        } catch {
+            debug("Macro - set error: ", error)
         }
-    } catch {
-        debug("deleteMacro error: ", error)
+    }
+
+    public static func delete(
+        macro: String,
+        sessionId: Int64
+    ) {
+        do {
+            try dbQueue.write { db in
+                guard
+                    let existing =
+                        try Macro
+                        .filter(Macro.Columns.sessionId == sessionId)
+                        .filter(Macro.Columns.macro == macro)
+                        .fetchOne(db)
+                else {
+                    return debug("Cannot find existing macro to delete")
+                }
+                try existing.delete(db)
+            }
+        } catch {
+            debug("Macro - delete error: ", error)
+        }
     }
 }

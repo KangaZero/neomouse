@@ -93,7 +93,7 @@ struct NeoMouse: App {
         // eg.. gridDivisions * gridDivisions <=findModeGridDivisionCharacters.count, and similar for
         // innerGridDivisions
         initializeDB(forceReIntialize: false)
-        appState.currentSession = getLastSession()
+        appState.currentSession = Session.getLast()
         guard let currentSession = appState.currentSession else {
             debug("No session was found")
             showFatalAlertAndQuit(
@@ -223,7 +223,7 @@ struct NeoMouse: App {
                             debug("setMark mark contains a non-shift modifiers, or it is not a single letter/digit")
                             return
                         }
-                        setMark(
+                        Mark.set(
                             mark: event.characters!,
                             isVisual: appState.isVisual,
                             startCGXPoint: appState.isVisual ? Double(appState.startCGXPoint ?? currentCGPoint.x) : nil,
@@ -249,7 +249,7 @@ struct NeoMouse: App {
                             debug("goToMark mark contains a non-shift modifiers, or it is not a single letter/digit")
                             return
                         }
-                        guard let mark = getMark(mark: event.characters!, sessionId: currentSession.id!) else {
+                        guard let mark = Mark.get(mark: event.characters!, sessionId: currentSession.id!) else {
                             appState.mode = .normal(
                                 currentPendingOperation: .none
                             )
@@ -288,7 +288,7 @@ struct NeoMouse: App {
                         let first = markChar.first,
                         first.isLetter || first.isNumber
                     {
-                        setMark(
+                        Mark.set(
                             mark: markChar,
                             isVisual: appState.isVisual,
                             startCGXPoint: Double(currentCGPoint.x),
