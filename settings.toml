@@ -39,6 +39,7 @@ available = ["numbers", "relativenumbers", "delmarks"]
 
 [configuration]
 max_session_count = 10
+new_session_on_open = true
 #
 # [keymap]
 # # Motion keys. "modifier + key(s)" 

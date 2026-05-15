@@ -1,3 +1,4 @@
+//TODO move this over to neomouseTypes
 import AppKit
 // MARK: - Supporting Types
 struct FindState {
@@ -17,8 +18,10 @@ public enum NormalModePendingOperation: Equatable {
     case gg  // `gg`
     case ctrlW  // Ctrl-w pressed, awaiting window command
     case setMark  // `m` pressed, awaiting mark name
-    case goToMark  // `'` pressed, awaiting set mark to go to
-    case goToMarkExact  // ``` pressed, awaiting set mark to go to exact location
+    // `'` pressed, awaiting set mark to go to exact location. Similar to vim `
+    case goToMark
+    // ``` pressed, awaiting set mark to go to exact location with exact visual state for said mark
+    case goToMarkExactState
     //TODO nice to have
     // case setMacro // 'q' pressed, awaiting macro name
     // case goToMacro // '@' pressed, awaiting set macro name to go to

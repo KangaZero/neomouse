@@ -6,8 +6,10 @@ import neomouseUtils
 func seedSession(session: Session) {
     do {
         try dbQueue.write { db in
-            var newSession = Session(name: "Seed Session", createdAt: Date(), updatedAt: Date())
-            try newSession.insert(db)
+            for i in 0..<5 {
+                var newSession = Session(id: Int64(i), name: "Seed \(i)", createdAt: Date(), updatedAt: Date())
+                try newSession.insert(db)
+            }
         }
     } catch {
         debug("Seed Session error: ", error)

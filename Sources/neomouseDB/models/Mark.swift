@@ -76,7 +76,7 @@ public func setMark(
                 existing.endCGYPoint = endCGYPoint
                 try existing.update(db)
             } else {
-                debug("Creating new mark in fn setMark")
+                debug("Creating new mark in fn setMark with mark \(mark)")
                 var newMark = Mark(
                     mark: mark,
                     isVisual: isVisual,

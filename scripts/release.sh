@@ -15,7 +15,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 step() { printf "\n\033[1;34m==>\033[0m %s\n" "$1"; }
-fail() { printf "\033[1;31merror:\033[0m %s\n" "$1" >&2; exit 1; }
+fail() {
+  printf "\033[1;31merror:\033[0m %s\n" "$1" >&2
+  exit 1
+}
 
 # ---------- args ----------
 
@@ -30,7 +33,7 @@ VERSION="$1"
 
 step "Checking preconditions"
 
-command -v gh >/dev/null    || fail "gh CLI not installed (brew install gh)"
+command -v gh >/dev/null || fail "gh CLI not installed (brew install gh)"
 command -v swift >/dev/null || fail "swift toolchain not found"
 gh auth status >/dev/null 2>&1 || fail "gh is not authenticated (run: gh auth login)"
 
@@ -40,12 +43,12 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [[ -z "$(git status --porcelain)" ]] || fail "Working tree is dirty. Commit or stash first."
 
 git rev-parse "$VERSION" >/dev/null 2>&1 && fail "Tag $VERSION already exists locally."
-git ls-remote --exit-code --tags origin "$VERSION" >/dev/null 2>&1 \
-  && fail "Tag $VERSION already exists on origin."
+git ls-remote --exit-code --tags origin "$VERSION" >/dev/null 2>&1 &&
+  fail "Tag $VERSION already exists on origin."
 
 git fetch --quiet origin
-[[ "$(git rev-parse main)" == "$(git rev-parse origin/main)" ]] \
-  || fail "Local main differs from origin/main. Pull or push first."
+[[ "$(git rev-parse main)" == "$(git rev-parse origin/main)" ]] ||
+  fail "Local main differs from origin/main. Pull or push first."
 
 echo "  branch: main"
 echo "  commit: $(git rev-parse --short HEAD)"
@@ -74,7 +77,7 @@ ARCHIVE_NAME="neomouse-${VERSION}-macos-arm64.tar.gz"
 ARCHIVE="dist/$ARCHIVE_NAME"
 
 tar -czf "$ARCHIVE" -C .build/release neomouse
-( cd dist && shasum -a 256 "$ARCHIVE_NAME" | tee "$ARCHIVE_NAME.sha256" )
+(cd dist && shasum -a 256 "$ARCHIVE_NAME" | tee "$ARCHIVE_NAME.sha256")
 
 ls -la "$ARCHIVE" "$ARCHIVE.sha256"
 
@@ -103,7 +106,7 @@ fi
 NOTES_FILE="$(mktemp)"
 trap 'rm -f "$NOTES_FILE"' EXIT
 
-cat > "$NOTES_FILE" <<EOF
+cat >"$NOTES_FILE" <<EOF
 ## Install
 
 1. Download \`$ARCHIVE_NAME\` below.
@@ -145,73 +148,73 @@ URL="$(gh release view "$VERSION" --json url -q .url)"
 # ---------- bump homebrew tap ----------
 
 if [[ "${SKIP_HOMEBREW:-}" == "1" ]]; then
-    step "Skipping Homebrew tap bump (SKIP_HOMEBREW=1)"
+  step "Skipping Homebrew tap bump (SKIP_HOMEBREW=1)"
 else
-    step "Bumping Homebrew formula in KangaZero/homebrew-neomouse"
+  step "Bumping Homebrew formula in KangaZero/homebrew-neomouse"
 
-    TAP_DIR="$(mktemp -d)"
-    # Append tap-dir cleanup to the existing trap (which removes NOTES_FILE).
-    trap 'rm -f "$NOTES_FILE"; rm -rf "$TAP_DIR"' EXIT
+  TAP_DIR="$(mktemp -d)"
+  # Append tap-dir cleanup to the existing trap (which removes NOTES_FILE).
+  trap 'rm -f "$NOTES_FILE"; rm -rf "$TAP_DIR"' EXIT
 
-    git clone --quiet --depth 1 \
-        git@github.com:KangaZero/homebrew-neomouse.git "$TAP_DIR"
+  git clone --quiet --depth 1 \
+    git@github.com:KangaZero/homebrew-neomouse.git "$TAP_DIR"
 
-    FORMULA="$TAP_DIR/Formula/neomouse.rb"
-    [[ -f "$FORMULA" ]] || fail "Formula not found at $FORMULA in cloned tap"
+  FORMULA="$TAP_DIR/Formula/neomouse.rb"
+  [[ -f "$FORMULA" ]] || fail "Formula not found at $FORMULA in cloned tap"
 
-    # BSD sed (macOS) — anchor each replacement to the field it should match.
-    sed -i.bak \
-        -e "s|^  url \".*\"|  url \"$ASSET_URL\"|" \
-        -e "s|^  sha256 \".*\"|  sha256 \"$HASH_HEX\"|" \
-        -e "s|^  version \".*\"|  version \"$BARE_VERSION\"|" \
-        "$FORMULA"
-    rm -f "$FORMULA.bak"
+  # BSD sed (macOS) — anchor each replacement to the field it should match.
+  sed -i.bak \
+    -e "s|^  url \".*\"|  url \"$ASSET_URL\"|" \
+    -e "s|^  sha256 \".*\"|  sha256 \"$HASH_HEX\"|" \
+    -e "s|^  version \".*\"|  version \"$BARE_VERSION\"|" \
+    "$FORMULA"
+  rm -f "$FORMULA.bak"
 
-    grep -q "$ASSET_URL"    "$FORMULA" || fail "Formula url did not update"
-    grep -q "$HASH_HEX"     "$FORMULA" || fail "Formula sha256 did not update"
-    grep -q "$BARE_VERSION" "$FORMULA" || fail "Formula version did not update"
+  grep -q "$ASSET_URL" "$FORMULA" || fail "Formula url did not update"
+  grep -q "$HASH_HEX" "$FORMULA" || fail "Formula sha256 did not update"
+  grep -q "$BARE_VERSION" "$FORMULA" || fail "Formula version did not update"
 
-    if git -C "$TAP_DIR" diff --quiet -- Formula/neomouse.rb; then
-        echo "Formula already at $VERSION; nothing to push."
-    else
-        git -C "$TAP_DIR" add Formula/neomouse.rb
-        git -C "$TAP_DIR" -c user.email="$(git config user.email)" \
-                         -c user.name="$(git config user.name)" \
-            commit -q -m "neomouse $VERSION"
-        git -C "$TAP_DIR" push --quiet origin HEAD
-        echo "Pushed formula bump to homebrew-neomouse."
-    fi
+  if git -C "$TAP_DIR" diff --quiet -- Formula/neomouse.rb; then
+    echo "Formula already at $VERSION; nothing to push."
+  else
+    git -C "$TAP_DIR" add Formula/neomouse.rb
+    git -C "$TAP_DIR" -c user.email="$(git config user.email)" \
+      -c user.name="$(git config user.name)" \
+      commit -q -m "neomouse $VERSION"
+    git -C "$TAP_DIR" push --quiet origin HEAD
+    echo "Pushed formula bump to homebrew-neomouse."
+  fi
 fi
 
 # ---------- bump in-repo flake.nix ----------
 
 if [[ "${SKIP_FLAKE:-}" == "1" ]]; then
-    step "Skipping flake.nix bump (SKIP_FLAKE=1)"
+  step "Skipping flake.nix bump (SKIP_FLAKE=1)"
 elif [[ ! -f flake.nix ]]; then
-    step "No flake.nix in repo; skipping flake bump"
+  step "No flake.nix in repo; skipping flake bump"
 else
-    step "Bumping in-repo flake.nix"
+  step "Bumping in-repo flake.nix"
 
-    command -v nix >/dev/null || fail "nix not found; can't compute SRI hash"
-    SRI_HASH="$(nix hash convert --hash-algo sha256 --to sri "$HASH_HEX")"
+  command -v nix >/dev/null || fail "nix not found; can't compute SRI hash"
+  SRI_HASH="$(nix hash convert --hash-algo sha256 --to sri "$HASH_HEX")"
 
-    sed -i.bak \
-        -e "s|version = \".*\";|version = \"$BARE_VERSION\";|" \
-        -e "s|hash = \"sha256-.*\";|hash = \"$SRI_HASH\";|" \
-        flake.nix
-    rm -f flake.nix.bak
+  sed -i.bak \
+    -e "s|version = \".*\";|version = \"$BARE_VERSION\";|" \
+    -e "s|hash = \"sha256-.*\";|hash = \"$SRI_HASH\";|" \
+    flake.nix
+  rm -f flake.nix.bak
 
-    grep -q "version = \"$BARE_VERSION\";" flake.nix || fail "flake.nix version did not update"
-    grep -q "$SRI_HASH" flake.nix || fail "flake.nix hash did not update"
+  grep -q "version = \"$BARE_VERSION\";" flake.nix || fail "flake.nix version did not update"
+  grep -q "$SRI_HASH" flake.nix || fail "flake.nix hash did not update"
 
-    if git diff --quiet -- flake.nix; then
-        echo "flake.nix already at $VERSION; nothing to commit."
-    else
-        git add flake.nix
-        git commit -q -m "flake: bump to $VERSION"
-        git push --quiet origin main
-        echo "Pushed flake.nix bump to origin/main."
-    fi
+  if git diff --quiet -- flake.nix; then
+    echo "flake.nix already at $VERSION; nothing to commit."
+  else
+    git add flake.nix
+    git commit -q -m "flake: bump to $VERSION"
+    git push --quiet origin main
+    echo "Pushed flake.nix bump to origin/main."
+  fi
 fi
 
 step "Done"
