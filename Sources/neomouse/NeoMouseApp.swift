@@ -506,6 +506,18 @@ struct NeoMouse: App {
                             currentPendingOperation: .goToRegister
                         )
                         break
+                    case "?":
+                        guard event.charactersIgnoringModifiers == "?" else {
+                            debug(
+                                "Expected '?' for help, got \(String(describing: event.charactersIgnoringModifiers))"
+                            )
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none
+                            )
+                        }
+                        HelpDialog.shared.toggle()
+                        appState.mode = .normal(currentPendingOperation: .none)
+                        break
                     // INFO: No need to do modifierFlags checks for captizalized chars, as a
                     //modifierFlag will trigger the lowercase char equivalent
                     case "G":
