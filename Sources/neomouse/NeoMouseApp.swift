@@ -23,7 +23,7 @@ class NeoMouseState: ObservableObject {
     @Published var operationCountAsString: String? = nil
     @Published var currentSession: Session? = nil
 
-    let commands: [String]
+    let commands: [Config.Command]
     //WARNING: Until a good dynamic solution is found, do not allow these 2 to be mutable, could be a headache as divisionCharacters may
     //need to added in to take in account if gridDivisions increased
     let gridDivisions: Int
@@ -50,7 +50,7 @@ class NeoMouseState: ObservableObject {
     // hardcoded values this class used before config wiring.
     init(config: Config? = nil) {
         self.gridInset = config?.grid.inset ?? Config.Grid.defaultInset
-        self.commands = (config?.commands.available ?? Config.Commands.defaultAvailable).map(\.rawValue)
+        self.commands = config?.commands.available ?? Config.Commands.defaultAvailable
         self.gridDivisions = config?.grid.divisions ?? Config.Grid.defaultDivisions
         self.innerGridDivisions = config?.grid.innerDivisions ?? Config.Grid.defaultInnerDivisions
         self.findModeGridDivisionCharacters =
@@ -952,41 +952,44 @@ struct NeoMouse: App {
                         break
                     }
                 case .command(let currentCommand, let suggestionIndex):
-                    //TODO change to switch case statement
-                    // Esc → exit command mode back to normal.
-                    if event.keyCode == charToKeyCodeMap["Esc"], event.modifierFlags.rawValue == 256 {
+                    switch event.keyCode {
+                    case charToKeyCodeMap["Esc"]:
+                        guard event.modifierFlags.rawValue == 256 else {
+                            break
+                        }
                         HelpDialog.shared.hide()
                         CommandLine.shared.hide()
                         appState.operationCountAsString = nil
                         appState.mode = .normal(currentPendingOperation: .none)
                         return
-                    }
-                    // Return / Enter → execute (TODO: dispatch command).
-                    if event.keyCode == charToKeyCodeMap["Return"]
-                        || event.keyCode == charToKeyCodeMap["Enter"]
-                    {
-                        debug("execute command: \(currentCommand)")
-                        CommandLine.shared.hide()
-                        appState.mode = .normal(currentPendingOperation: .none)
+                    case charToKeyCodeMap["Return"], charToKeyCodeMap["Enter"]:
+                        if let suggestionIndex {
+                            CommandLine.shared.hide()
+                            CommandLine.shared.executeSuggestionCommand(at: suggestionIndex)
+                        } else {
+                            CommandLine.shared.hide()
+                            debug("execute command: \(currentCommand)")
+                            appState.mode = .normal(currentPendingOperation: .none)
+                        }
                         return
-                    }
-                    // Backspace → drop last char + reset selection (filter changes).
-                    if event.keyCode == charToKeyCodeMap["Backspace"] {
+                    case charToKeyCodeMap["Backspace"], charToKeyCodeMap["Delete"]:
                         appState.mode = .command(
                             command: String(currentCommand.dropLast()),
                             suggestionIndex: nil
                         )
                         return
+                    default:
+                        break
                     }
                     // Tab / Shift-Tab → round-robin cycle through filtered hits.
                     // Mirrors nvim wildmenu: list always visible, Tab moves
                     // the highlight; the command text itself doesn't change
                     // until the user accepts via Enter.
                     if event.keyCode == charToKeyCodeMap["Tab"] {
-                        let matches =
-                            currentCommand.isEmpty
-                            ? appState.commands
-                            : appState.commands.filter { $0.localizedCaseInsensitiveContains(currentCommand) }
+                        // Single source of truth: ask CommandLine for the
+                        // current filtered list (same code path the view +
+                        // executor use).
+                        let matches = CommandLine.shared.filtered
                         guard !matches.isEmpty else { return }
                         let isReverse = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
                         let next: Int
