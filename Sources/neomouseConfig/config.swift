@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 import TOMLDecoder
 
+import neomouseTypes
+
 // Configurable settings sourced from `settings.toml`. Mirrors the constant
 // (`let`) properties of `NeoMouseState`, plus `gridInset` which is declared
 // `@Published` but never reassigned. Runtime/observable state (mode, visual
@@ -69,25 +71,31 @@ public struct Config: Decodable, Sendable {
         public let available: [Command]
         /// Single source of truth for the fallback list when settings.toml is
         /// missing or has no `[commands]` section. Update here; nowhere else.
-        public static let defaultAvailable: [Command] = [.numbers, .relativenumbers, .help, .delmarks, .registers]
+        public static let defaultAvailable: [Command] = [
+            .numbers, .nu, .relativenumbers, .rnu, .help, .h, .delmarks, .delm, .registers, .reg,
+        ]
     }
 
     public enum Command: String, Decodable, Sendable {
-        case numbers
-        case relativenumbers
-        case registers
-        case help
-        case delmarks
+        case numbers, nu
+        case relativenumbers, rnu
+        case registers, reg
+        case jumps, ju
+        case help, h
+        case delmarks, delm
+        case q, quit
     }
 
     public struct Configuration: Decodable, Sendable {
         public let isDisableKeyInput: Bool
         public let maxSessionCount: UInt
         public let newSessionOnOpen: Bool
+        public let modeOnStart: NeomouseType.ConfigMode
 
         public static let defaultIsDisableKeyInput: Bool = true
         public static let defaultMaxSessionCount: UInt = 10
         public static let defaultNewSessionOnOpen: Bool = false
+        public static let defaultModeOnStart: NeomouseType.ConfigMode = .normal
     }
 }
 

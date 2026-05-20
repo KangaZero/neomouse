@@ -17,8 +17,14 @@ public enum Screen {
     /// Size of the screen currently under the cursor.
     public static func currentSize() -> CGSize? {
         guard let mouseLoc = CGEvent(source: nil)?.location else { return nil }
-        return activeDisplays().first(where: { CGDisplayBounds($0).contains(mouseLoc) }).map {
+        let currentSize = activeDisplays().first(where: { CGDisplayBounds($0).contains(mouseLoc) }).map {
             CGDisplayBounds($0).size
+        }
+        if let currentSize {
+            return currentSize
+        } else {
+            debug("Screen.currentSize: could not find display under cursor; defaulting to main display size")
+            return mainRect().size
         }
     }
 

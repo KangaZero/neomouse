@@ -103,14 +103,14 @@ public func initializeDB(forceReIntialize: Bool = false) {
             }
             debug("Created 'jump' table")
 
-            try db.create(table: "macro") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("macro", .text).notNull()
-                t.column("keysUsed", .text).notNull()
-                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
-                t.belongsTo("session", onDelete: .cascade).notNull()
-            }
-            debug("Created 'macro' table")
+            // try db.create(table: "macro") { t in
+            //     t.autoIncrementedPrimaryKey("id")
+            //     t.column("macro", .text).notNull()
+            //     t.column("keysUsed", .text).notNull()
+            //     t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            //     t.belongsTo("session", onDelete: .cascade).notNull()
+            // }
+            // debug("Created 'macro' table")
         }
     } catch {
         debug("Initialize DB error: ", error)

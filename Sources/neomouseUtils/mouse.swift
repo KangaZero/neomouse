@@ -73,15 +73,20 @@ public enum Mouse {
             debug("Mouse.moveRelative: could not retrieve cursor location")
             return
         }
-        guard
-            let currentDisplay = Screen.activeDisplays().first(where: {
-                CGDisplayBounds($0).contains(current)
-            })
-        else {
-            debug("Mouse.moveRelative: could not find display under cursor")
-            return
-        }
-        let currentBounds = CGDisplayBounds(currentDisplay)
+
+        //IMPORTANT: Will default to main display if it can't find the display under the cursor, to avoid the mouse getting "lost" and unresponsive. This can happen when the cursor is on a secondary display that gets disconnected, or if there's some weirdness with the CG API. It's better to have a fallback than to just not move at all.
+        let currentDisplayId =
+            Screen.activeDisplays().first(where: { CGDisplayBounds($0).contains(current) }) ?? CGMainDisplayID()
+
+        // guard
+        //     let currentDisplayId = Screen.activeDisplays().first(where: {
+        //         CGDisplayBounds($0).contains(current)
+        //     })
+        // else {
+        //     debug("Mouse.moveRelative: could not find display under cursor, defaulting to main screen")
+        //     return
+        // }
+        let currentBounds = CGDisplayBounds(currentDisplayId)
         let allScreensRect = Screen.allBoundingRect()
 
         // CG coords: y increases downward, so positive y = move down

@@ -5,9 +5,10 @@ import SwiftUI
 import neomouseConfig
 import neomouseDB
 import neomouseUtils
+import neomouseTypes
 
 class NeoMouseState: ObservableObject {
-    @Published var mode: Mode = .disabled
+    @Published var mode: NeomouseType.Mode = .disabled
     @Published var gridInset: CGFloat
     //TODO Eventually use Session.Operations Table for the below Published var
     @Published var isVisual: Bool = false
@@ -22,6 +23,8 @@ class NeoMouseState: ObservableObject {
 
     @Published var operationCountAsString: String? = nil
     @Published var currentSession: Session? = nil
+
+    //TODO change to a single source of truth so use Config
 
     let commands: [Config.Command]
     //WARNING: Until a good dynamic solution is found, do not allow these 2 to be mutable, could be a headache as divisionCharacters may
@@ -44,6 +47,8 @@ class NeoMouseState: ObservableObject {
 
     // Configuration settings
     let isDisableKeyInput: Bool
+    let modeOnStart: NeomouseType.ConfigMode
+    //TODO add the rest
 
     // Single init covers both paths: when neomouseConfig finds settings.toml,
     // every property comes from there; otherwise each falls back to the same
@@ -74,6 +79,24 @@ class NeoMouseState: ObservableObject {
             config?.motion.isClampCursorToCurrentScreen ?? Config.Motion.defaultIsClampCursorToCurrentScreen
         self.isDisableKeyInput =
             config?.configuration.isDisableKeyInput ?? Config.Configuration.defaultIsDisableKeyInput
+        self.modeOnStart =
+            config?.configuration.modeOnStart ?? Config.Configuration.defaultModeOnStart
+
+        mode = {
+            switch self.modeOnStart {
+            case .normal:
+                return .normal(currentPendingOperation: .none)
+            case .find:
+                return .find(currentPendingOperation: nil, findState: NeomouseType.FindState())
+            case .command:
+                return .command(command: "", suggestionIndex: nil)
+            case .disabled:
+                return .disabled
+            //TODO not sure if this option should be needed
+            case .menu:
+                return .menu
+            }
+        }()
     }
 }
 
@@ -147,21 +170,24 @@ struct NeoMouse: App {
         NeoMouse.keyHandler = { event in
             MainActor.assumeIsolated {
                 let _currentCGPoint = Mouse.location()
+                //IMPORTANT: both _currentScreenSize && currentDisplayBounds will default to main screen if nothing is found
                 let _currentScreenSize = Screen.currentSize()
-                let _currentDisplayBounds = _currentCGPoint.flatMap { pt in
-                    Screen.activeDisplays().first(where: { CGDisplayBounds($0).contains(pt) })
-                        .map { CGDisplayBounds($0) }
-                }
+                let currentDisplayBounds =
+                    _currentCGPoint.flatMap { pt in
+                        Screen.activeDisplays().first(where: { CGDisplayBounds($0).contains(pt) })
+                            .map { CGDisplayBounds($0) }
+                    } ?? Screen.mainRect()
                 guard let currentCGPoint = _currentCGPoint,
-                    let currentScreenSize = _currentScreenSize,
-                    let currentDisplayBounds = _currentDisplayBounds
+                    let currentScreenSize = _currentScreenSize
+                    // let currentDisplayBounds = _currentDisplayBounds
                 else {
                     debug(
                         """
                         [guard fail]
                           currentCGPoint    = \(String(describing: _currentCGPoint))
                           currentScreenSize = \(String(describing: _currentScreenSize))
-                          currentDisplay    = \(String(describing: _currentDisplayBounds))
+                          currentDisplay    = \(String(describing: currentDisplayBounds))
+                          activeDisplays    = \(Screen.activeDisplays())
                         """
                     )
                     return
@@ -471,7 +497,7 @@ struct NeoMouse: App {
                         }
                         appState.mode = .find(
                             currentPendingOperation: nil,
-                            findState: FindState()
+                            findState: NeomouseType.FindState()
                         )
                         HelpDialog.shared.hide()
                         CommandLine.shared.hide()
@@ -549,7 +575,6 @@ struct NeoMouse: App {
                         HelpDialog.shared.toggle()
                         appState.mode = .normal(currentPendingOperation: .none)
                         break
-
                     case ":":
                         guard event.charactersIgnoringModifiers == ":" else {
                             debug(
@@ -559,6 +584,7 @@ struct NeoMouse: App {
                                 currentPendingOperation: .none
                             )
                         }
+                        HelpDialog.shared.hide()
                         appState.mode = .command(command: "", suggestionIndex: nil)
                         CommandLine.shared.passAppState(state: appState)
                         CommandLine.shared.toggle()
@@ -993,11 +1019,11 @@ struct NeoMouse: App {
                         guard !matches.isEmpty else { return }
                         let isReverse = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
                         let next: Int
-                        if let cur = suggestionIndex {
+                        if let currentSuggestionIndex = suggestionIndex {
                             next =
                                 isReverse
-                                ? (cur - 1 + matches.count) % matches.count
-                                : (cur + 1) % matches.count
+                                ? (currentSuggestionIndex - 1 + matches.count) % matches.count
+                                : (currentSuggestionIndex + 1) % matches.count
                         } else {
                             next = isReverse ? matches.count - 1 : 0
                         }
@@ -1147,7 +1173,7 @@ struct NeoMouse: App {
             debug(
                 "\(keyCodeAsChar) is in gridDivisionCharactersIndex: \(gridDivisionCharactersIndex)"
             )
-            let updatedFindState = FindState(
+            let updatedFindState = NeomouseType.FindState(
                 pendingGridDivisionIndex: gridDivisionCharactersIndex,
                 pendingInnerGridDivisionIndex: nil
             )
@@ -1181,7 +1207,7 @@ struct NeoMouse: App {
                 "\(keyCodeAsChar) is in innerGridDivisionCharactersIndex: \(innerGridDivisionCharactersIndex)"
             )
 
-            let updatedFindState = FindState(
+            let updatedFindState = NeomouseType.FindState(
                 pendingGridDivisionIndex: findState.pendingGridDivisionIndex,
                 pendingInnerGridDivisionIndex: innerGridDivisionCharactersIndex
             )

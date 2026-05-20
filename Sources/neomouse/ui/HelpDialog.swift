@@ -23,6 +23,16 @@ final class HelpDialog {
     }
 
     func show() {
+        // Gate: only available in normal mode. Stops `?` from opening the
+        // help panel while typing in command mode, picking a target in
+        // find mode, etc.
+        guard case .normal = NeoMouse.sharedState.mode else {
+            debug(
+                "HelpDialog.show: refused — (automatically hiding if shown) only available in normal mode (current: \(NeoMouse.sharedState.mode))"
+            )
+            hide()
+            return
+        }
         guard
             let currentScreen = NSScreen.screens.first(where: {
                 $0.frame.contains(NSEvent.mouseLocation)

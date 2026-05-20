@@ -52,17 +52,32 @@ final class CommandLine {
         guard let appState, case .command = appState.mode else {
             return debug("executeSuggestionCommand called but appState.mode is not .command")
         }
-        let hits = filtered
-        guard suggestionIndex >= 0 && suggestionIndex < hits.count else {
+        guard suggestionIndex >= 0 && suggestionIndex < filtered.count else {
             return debug(
-                "executeSuggestionCommand called with out-of-bounds suggestionIndex \(suggestionIndex) for filtered commands count \(hits.count)"
+                "executeSuggestionCommand called with out-of-bounds suggestionIndex \(suggestionIndex) for filtered commands count \(filtered.count)"
             )
         }
-        let commandToExecute: Config.Command = hits[suggestionIndex]
+        let commandToExecute: Config.Command = filtered[suggestionIndex]
         debug("executeSuggestionCommand: \(commandToExecute)")
-        _ = appState
-        // TODO: dispatch — switch over commandToExecute (Config.Command):
-        //   .numbers / .relativenumbers / .delmarks
+        switch commandToExecute {
+        case .help, .h:
+            HelpDialog.shared.toggle()
+            appState.mode = .normal(currentPendingOperation: .none)
+            return
+        case .numbers, .nu:
+            NumbersOverlay.shared.passAppState(state: appState)
+            NumbersOverlay.shared.toggle(mode: .absolute)
+            appState.mode = .normal(currentPendingOperation: .none)
+            return
+        case .relativenumbers, .rnu:
+            NumbersOverlay.shared.passAppState(state: appState)
+            NumbersOverlay.shared.toggle(mode: .relative)
+            appState.mode = .normal(currentPendingOperation: .none)
+            return
+        case .quit, .q:
+            NSApp.terminate(nil)
+        default: return
+        }
     }
 
     private func show() {
@@ -101,7 +116,7 @@ final class CommandLine {
         // Bottom-left of the display under the cursor. visibleFrame already
         // excludes the menu bar + Dock.
         let x = currentScreen.visibleFrame.minX + 20
-        let y = currentScreen.visibleFrame.maxY + 20
+        let y = currentScreen.visibleFrame.maxY - 80
         panel.setFrameOrigin(CGPoint(x: x, y: y))
 
         panel.orderFront(nil)

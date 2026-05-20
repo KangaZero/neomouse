@@ -69,16 +69,16 @@ extension NeoMouse {
                             let hasSystemMod =
                                 mods.contains(.command) || mods.contains(.control) || mods.contains(.option)
                             let keyCode = nsEvent.keyCode
-                            //IMPORTANT: Disable specialKeys when in command or menu mode as these keys will be used
                             let isSpecialKey: Bool = {
-                                if case .command = state.mode { return true }
-                                if case .menu = state.mode { return true }
                                 switch keyCode {
                                 case charToKeyCodeMap["Tab"], charToKeyCodeMap["Backspace"], charToKeyCodeMap["Return"],
                                     charToKeyCodeMap["Enter"],
                                     charToKeyCodeMap["Esc"], charToKeyCodeMap["LeftArrow"],
                                     charToKeyCodeMap["RightArrow"],
                                     charToKeyCodeMap["DownArrow"], charToKeyCodeMap["UpArrow"]:
+                                    //IMPORTANT: Disable specialKeys when in command or menu mode as these keys will be used
+                                    if case .command = state.mode { return false }
+                                    if case .menu = state.mode { return false }
                                     return true
                                 default:
                                     return false

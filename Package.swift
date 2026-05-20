@@ -27,6 +27,7 @@ let package = Package(
                 "neomouseDB",
                 "neomouseUtils",
                 "neomouseConfig",
+                "neomouseTypes",
             ],
             path: "Sources/neomouse",
         ),
@@ -34,6 +35,7 @@ let package = Package(
             name: "neomouseDB",
             dependencies: [
                 "neomouseUtils",
+                "neomouseTypes",
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "TOMLDecoder", package: "TOMLDecoder"),
             ],
@@ -48,6 +50,7 @@ let package = Package(
             name: "neomouseConfig",
             dependencies: [
                 "neomouseUtils",
+                "neomouseTypes",
                 .product(name: "TOMLDecoder", package: "TOMLDecoder"),
             ],
             path: "Sources/neomouseConfig",
@@ -60,7 +63,9 @@ let package = Package(
         .testTarget(
             name: "neomouseTests",
             dependencies: [
-                "neomouse", "neomouseDB", "neomouseUtils", "neomouseConfig",
+                "neomouse",
+                "neomouseTypes",
+                "neomouseDB", "neomouseUtils", "neomouseConfig",
                 .product(name: "Testing", package: "swift-testing"),
             ],
             path: "Tests/neomouseTests",
