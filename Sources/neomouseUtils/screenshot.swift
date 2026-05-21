@@ -1,28 +1,9 @@
 import ScreenCaptureKit
 import CoreGraphics
 
-// public func screenshot(rect: CGRect, excluding ids: [CGWindowID] = []) async throws -> CGImage? {
-//     let content = try await SCShareableContent.current
-//     guard let display = content.displays.first else { return nil }
-//     let excluded = ids.isEmpty ? [] : content.windows.filter { ids.contains($0.windowID) }
-//     let filter = SCContentFilter(display: display, excludingWindows: excluded)
-//     let config = SCStreamConfiguration()
-//     config.sourceRect = rect
-//     config.width = Int(rect.width)
-//     config.height = Int(rect.height)
-//     config.showsCursor = false
-//
-//     // 4. Take the screenshot
-//     // INFO: Check if we want to really use macOS 14, since currently on this requires it
-//     let image = try await SCScreenshotManager.captureImage(
-//         contentFilter: filter,
-//         configuration: config
-//     )
-//
-//     return image
-// }
-
-public func screenshot(rect: CGRect, excluding ids: [CGWindowID] = []) async throws -> CGImage? {
+public func screenshot(rect: CGRect, excluding ids: [CGWindowID] = []) async throws
+    -> CGImage?
+{
     let content = try await SCShareableContent.current
 
     // Find the display that contains this rect
@@ -59,7 +40,9 @@ public func screenshot(rect: CGRect, excluding ids: [CGWindowID] = []) async thr
     return image
 }
 
-public func screenshotMultiDisplay(rect: CGRect, excluding ids: [CGWindowID] = []) async throws -> CGImage? {
+public func screenshotMultiDisplay(rect: CGRect, excluding ids: [CGWindowID] = [])
+    async throws -> CGImage?
+{
     let content = try await SCShareableContent.current
 
     // Find all displays that intersect the rect

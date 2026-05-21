@@ -35,6 +35,7 @@ public struct NeomouseType {
         case none
         case g  // `g` pressed once, awaiting completion
         case gg  // `gg`
+        case ggy
         case ggv  // for select all similar to vim's `ggVG`
         case ctrlW  // Ctrl-w pressed, awaiting window command
         case setMark  // `m` pressed, awaiting mark name

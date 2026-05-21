@@ -12,11 +12,17 @@ public enum Gesture {
         stepValue: Double,
         incrementsPerGesture: UInt
     ) {
+        debug(
+            "pinchZoom \(direction) at \(point) with stepValue \(stepValue) and incrementsPerGesture \(incrementsPerGesture)"
+        )
         var safeStepValue = stepValue
         var safeIncrementsPerGesture = incrementsPerGesture
-        if safeStepValue <= 0 {
-            print("Invalid step value for pinchZoom: \(safeStepValue). Defaulting to 0.1")
-            safeStepValue = 0.1
+        //IMPORTANT: Needs at least 0.2 for zoom-in
+        let minStepValue = direction == .in ? 0.2 : 0.1
+        if safeStepValue <= minStepValue {
+            let stepValueToUse = direction == .in ? 0.2 : 0.1
+            print("Invalid step value for pinchZoom: \(safeStepValue). Defaulting to \(stepValueToUse)")
+            safeStepValue = stepValueToUse
         }
         if safeIncrementsPerGesture == 0 {
             print("Invalid incrementsPerGesture for pinchZoom: 0. Defaulting to 1")
@@ -36,13 +42,15 @@ public enum Gesture {
     }
 
     public static func smartMagnify(at point: CGPoint) {
+        debug("smartMagnify at \(point)")
         let src = Mouse.eventSource()
-        postGestureEvent(src: src, type: .smartMagnify, value: 0, phase: .began, at: point)
-        usleep(8000)
-        postGestureEvent(src: src, type: .smartMagnify, value: 0, phase: .ended, at: point)
+        // smartMagnify is a one-shot toggle, not a phased gesture — a single
+        // event with value=1 mirrors what a real two-finger double-tap emits.
+        postGestureEvent(src: src, type: .smartMagnify, value: 1, phase: .began, at: point)
     }
 
     public static func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {
+        debug("rotate \(degrees) degrees at \(point) with incrementsPerGesture \(incrementsPerGesture)")
         var safeIncrementsPerGesture = incrementsPerGesture
         if safeIncrementsPerGesture == 0 {
             print("Invalid incrementsPerGesture for rotate: 0. Defaulting to 1")

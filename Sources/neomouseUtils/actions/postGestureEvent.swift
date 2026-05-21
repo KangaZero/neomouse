@@ -22,7 +22,9 @@ func postGestureEvent(
     dx: Double = 0,
     dy: Double = 0
 ) {
-    guard let event = CGEvent(source: src) else { return }
+    let source = src
+    source?.userData = System.synthesizedEventUserData  // Tag the source so our CGEventTap can spot it.
+    guard let event = CGEvent(source: source) else { return }
     event.type = CGEventType(rawValue: 29)!  // kCGEventGesture
     event.location = point
     event.setIntegerValueField(CGEventField(rawValue: 110)!, value: type.subtype)

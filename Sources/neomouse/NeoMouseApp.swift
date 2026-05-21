@@ -25,7 +25,6 @@ class NeoMouseState: ObservableObject {
     @Published var currentSession: Session? = nil
 
     //TODO change to a single source of truth so use Config
-
     let commands: [Config.Command]
     //WARNING: Until a good dynamic solution is found, do not allow these 2 to be mutable, could be a headache as divisionCharacters may
     //need to added in to take in account if gridDivisions increased
@@ -321,6 +320,56 @@ struct NeoMouse: App {
                     default: break
                     }
                     switch currentPendingNormalOperation {
+                    case .gg:
+                        switch (event.characters, appState.isVisual) {
+                        case ("y", false):
+                            guard event.modifierFlags.rawValue == 256 else {
+                                return
+                            }
+                            appState.operationCountAsString = nil
+                            appState.mode = .normal(
+                                currentPendingOperation: .ggy
+                            )
+                            return
+                        case ("v", false):
+                            CoreOperations.toggleVisualState(
+                                event: event, appState: appState,
+                                currentPendingNormalOperation: currentPendingNormalOperation,
+                                currentCGPoint: currentCGPoint
+                            )
+                            appState.mode = .normal(
+                                currentPendingOperation: .ggv
+                            )
+                            return
+                        default:
+                            break
+                        }
+                        break
+                    case .ggy:
+                        guard
+                            event.characters == "G"
+                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .shift, .capsLock,
+                                ])
+                        else {
+                            appState.operationCountAsString = nil
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none
+                            )
+                        }
+                        Task { @MainActor in
+                            do {
+                                let screenshotTaken = try await screenshot(
+                                    rect: currentDisplayBounds, excluding: CoreOperations.excludedWindowIDsForScreenshot
+                                )
+                                CoreOperations.registerCurrentPasteboardItem(
+                                    currentSession: currentSession,
+                                    activeRegister: "0")
+                            } catch {
+                                debug("ggy screenshot failed: \(error)")
+                            }
+                        }
+                        break
                     case .setMark:
                         guard
                             event.modifierFlags.rawValue == 256
@@ -416,8 +465,8 @@ struct NeoMouse: App {
                             if appState.isVisual {
                                 CoreOperations.normalYank(
                                     event: event, currentSession: currentSession, appState: appState)
-                                CoreOperations.registerScreenshot(
-                                    event: event, appState: appState, currentSession: currentSession,
+                                CoreOperations.registerCurrentPasteboardItem(
+                                    currentSession: currentSession,
                                     activeRegister: activeRegister)
                             } else {
                                 CoreOperations.registerYank(
@@ -425,45 +474,16 @@ struct NeoMouse: App {
                             }
                             break
                         case "d", "D":
-                            guard
-                                (event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ]))
-                            else {
-                                break
-                            }
-                            System.simulate(.cut)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
-                                    debug(
-                                        "Copied item to clipboard from deletion: \(Pasteboard.preview(pasteboardItem))")
-                                    Register.set(
-                                        register: activeRegister, item: pasteboardItem, sessionId: currentSession.id!)
-                                }
-                            }
+                            CoreOperations.delete(
+                                event: event, appState: appState, currentSession: currentSession)
+                            CoreOperations.registerCurrentPasteboardItem(
+                                currentSession: currentSession,
+                                activeRegister: activeRegister)
                             break
                         case "p", "P":
-                            guard
-                                (event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ]))
-                            else {
-                                break
-                            }
-                            guard
-                                let item = Register.get(register: activeRegister, sessionId: currentSession.id!)?
-                                    .pasteboardItem
-                            else {
-                                debug("paste: register '\(activeRegister)' empty")
-                                break
-                            }
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.writeObjects([item])
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                System.simulate(.paste)
-                            }
+                            CoreOperations.pasteFromRegister(
+                                event: event, appState: appState, currentSession: currentSession,
+                                activeRegister: activeRegister)
                             break
                         default:
                             break
@@ -670,8 +690,9 @@ struct NeoMouse: App {
                             )
                             break
                         }
+                        //TODO move over to currentPendingOperation switch case statement
                         // "g" instead of "gg" as the following "g" is only appended/updated onto appState after current MainActor event
-                        if operationCount > 0 && currentPendingNormalOperation == .g {
+                        if operationCount >= 1 && currentPendingNormalOperation == .g {
                             let _ggUsable = CGRect(
                                 x: appState.gridInset,
                                 y: appState.gridInset,
@@ -769,44 +790,10 @@ struct NeoMouse: App {
                         VisualHighlightOverlay.shared.passAppState(state: appState)
                         break
                     case "v":
-                        appState.operationCountAsString = nil
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(currentPendingOperation: .none)
-                        }
-                        appState.isVisual.toggle()
-                        guard appState.isVisual else {
-                            exitVisualMode(
-                                appState: appState,
-                                visualHighlightOverlay:
-                                    VisualHighlightOverlay.shared)
-                            return
-                        }
-                        if currentPendingNormalOperation == .g
-                            && appState.previousVisualStartCGXPoint != nil
-                            && appState.previousVisualStartCGYPoint != nil
-                            && appState.previousVisualEndCGXPoint != nil
-                            && appState.previousVisualEndCGYPoint != nil
-                        {
-                            // Mouse.down(.left, at: currentCGPoint)
-                            appState.startCGXPoint = appState.previousVisualStartCGXPoint
-                            appState.startCGYPoint = appState.previousVisualStartCGYPoint
-                            appState.endCGXPoint = appState.previousVisualEndCGXPoint
-                            appState.endCGYPoint = appState.previousVisualEndCGYPoint
-                            VisualHighlightOverlay.shared.passAppState(state: appState)
-                            Mouse.moveToGlobal(
-                                x: appState.endCGXPoint!,
-                                y: appState.endCGYPoint!)
-                            appState.mode = .normal(currentPendingOperation: .none)
-                        } else {
-                            //Go to Visual state
-                            // Mouse.down(.left, at: currentCGPoint)
-                            appState.startCGXPoint = currentCGPoint.x
-                            appState.startCGYPoint = currentCGPoint.y
-                            appState.endCGXPoint = currentCGPoint.x
-                            appState.endCGYPoint = currentCGPoint.y
-                            VisualHighlightOverlay.shared.passAppState(state: appState)
-                            appState.mode = .normal(currentPendingOperation: .none)
-                        }
+                        CoreOperations.toggleVisualState(
+                            event: event, appState: appState,
+                            currentPendingNormalOperation: currentPendingNormalOperation, currentCGPoint: currentCGPoint
+                        )
                         break
                     case "y", "Y":
                         CoreOperations.normalYank(
@@ -886,6 +873,15 @@ struct NeoMouse: App {
                         )
                         break
                     case "R":
+                        guard
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                .shift, .capsLock,
+                            ])
+                        else {
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none
+                            )
+                        }
                         Gesture.rotate(
                             degrees: -appState.degreesToRotate, at: currentCGPoint,
                             incrementsPerGesture:
@@ -949,6 +945,21 @@ struct NeoMouse: App {
                             .out, at: currentCGPoint,
                             stepValue: operationCount * appState.zoomStepValue,
                             incrementsPerGesture: appState.incrementsPerGesture)
+                        appState.mode = .normal(
+                            currentPendingOperation: .none
+                        )
+                        break
+                    case "S":
+                        guard
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                .shift, .capsLock,
+                            ])
+                        else {
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none
+                            )
+                        }
+                        Gesture.smartMagnify(at: currentCGPoint)
                         appState.mode = .normal(
                             currentPendingOperation: .none
                         )
@@ -1133,6 +1144,12 @@ struct NeoMouse: App {
                         Pasteboard.dump()
                         if let item = Pasteboard.getFirst() {
                             debug("Clipboard changed: \(Pasteboard.preview(item))")
+                            if let currentSession = NeoMouse.sharedState.currentSession {
+                                CoreOperations.registerCurrentPasteboardItem(
+                                    currentSession: currentSession, activeRegister: "0")
+                            } else {
+                                debug("No current session found, cannot register clipboard item to register '0'")
+                            }
                         }
                     }
                 }
