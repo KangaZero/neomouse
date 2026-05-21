@@ -11,6 +11,9 @@ final class CommandLine {
     private var window: NSWindow?
     private weak var appState: NeoMouseState?
 
+    var windowID: CGWindowID? {
+        window.map { CGWindowID($0.windowNumber) }
+    }
     // Single source of truth for command-mode derived state. Every read goes
     // through the singleton so the view, the Tab-cycle handler, and the
     // executor cannot disagree about what's typed or what's filtered.
@@ -136,6 +139,16 @@ final class CommandLine {
         case .relativenumbers, .rnu:
             NumbersOverlay.shared.passAppState(state: appState)
             NumbersOverlay.shared.toggle(mode: .relative)
+            appState.mode = .normal(currentPendingOperation: .none)
+            return
+        case .cursorline, .cul:
+            NumbersOverlay.shared.passAppState(state: appState)
+            NumbersOverlay.shared.toggleOption(.cursorline)
+            appState.mode = .normal(currentPendingOperation: .none)
+            return
+        case .cursorcolumn, .cuc:
+            NumbersOverlay.shared.passAppState(state: appState)
+            NumbersOverlay.shared.toggleOption(.cursorcolumn)
             appState.mode = .normal(currentPendingOperation: .none)
             return
         case .quit, .q:

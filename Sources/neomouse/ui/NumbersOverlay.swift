@@ -29,14 +29,19 @@ import neomouseUtils
 final class NumbersOverlay {
     static let shared = NumbersOverlay()
 
-    enum Mode { case absolute, relative }
+    /// `.off` = no row/col labels (but the overlay window may still be
+    /// shown if any band option is active). `.absolute` / `.relative` =
+    /// the two nvim-style number-label modes.
+    enum Mode: Equatable { case off, absolute, relative }
+    enum Option { case cursorline, cursorcolumn }
 
     /// Observable state the SwiftUI view binds to. Lives on the singleton so
     /// the global mouse monitor can mutate `currentLineIndex` /
     /// `currentColumnIndex` without having to thread a reference back into
     /// the view.
     final class Model: ObservableObject {
-        @Published var mode: Mode = .absolute
+        @Published var mode: Mode = .off
+        @Published var options: [Option] = []
         @Published var rowsOnScreen: Int = 1
         @Published var columnsOnScreen: Int = 1
         /// Cell size in points. Derived from `usable / count` here — counts
@@ -58,6 +63,10 @@ final class NumbersOverlay {
 
     let model = Model()
     private var window: NSWindow?
+
+    var windowID: CGWindowID? {
+        window.map { CGWindowID($0.windowNumber) }
+    }
     private weak var appState: NeoMouseState?
     private var mouseMonitor: Any?
     /// The display the overlay is currently pinned to. When the cursor
@@ -74,23 +83,64 @@ final class NumbersOverlay {
         appState = state
     }
 
-    /// Toggle the overlay. If it's already visible in the same mode, hide.
-    /// If visible in a different mode, swap to the new mode without flicker.
+    /// Toggle a label mode. Same-mode → labels off (window may stay if a
+    /// band option is still active). Different-mode → switch labels.
     func toggle(mode: Mode) {
-        if let window, window.isVisible {
-            if model.mode == mode {
-                hide()
-            } else {
-                switchMode(to: mode)
-            }
+        guard mode != .off else { return }  // .off is internal
+        setMode(model.mode == mode ? .off : mode)
+    }
+
+    /// Toggle a band option (`:cursorline` / `:cursorcolumn`). Independent
+    /// of `mode` — bands can be active without any label mode, and vice
+    /// versa. Visibility resolves to "show window iff anything is visible."
+    func toggleOption(_ option: Option) {
+        if let idx = model.options.firstIndex(of: option) {
+            model.options.remove(at: idx)
         } else {
-            show(mode: mode)
+            model.options.append(option)
+        }
+        updateVisibility()
+        if isWindowVisible {
+            // Bring indices in sync immediately so the band lands on the
+            // correct row/col without waiting for the first mouse move.
+            recomputeIndices(mouseLocation: NSEvent.mouseLocation)
         }
     }
 
-    func show(mode: Mode) {
+    func hide() {
+        window?.orderOut(nil)
+        removeMouseMonitor()
+    }
+
+    // MARK: - Visibility / mode-setting internals
+
+    private var isWindowVisible: Bool { window?.isVisible ?? false }
+
+    private func setMode(_ mode: Mode) {
+        model.mode = mode
+        updateVisibility()
+        if isWindowVisible {
+            recomputeIndices(mouseLocation: NSEvent.mouseLocation)
+        }
+    }
+
+    /// Resolve "should the overlay window be visible?" from current state.
+    /// Window stays up while *anything* it draws is active — label mode or
+    /// any band option. Hides once everything's off.
+    private func updateVisibility() {
+        if model.mode == .off && model.options.isEmpty {
+            hide()
+        } else {
+            present()
+        }
+    }
+
+    /// Create (if needed) + order-front the overlay window. Pure plumbing —
+    /// callers mutate `mode` / `options` first, then call this via
+    /// `updateVisibility`.
+    private func present() {
         guard appState !== nil else {
-            debug("NumbersOverlay.show: no appState")
+            debug("NumbersOverlay.present: no appState")
             return
         }
         guard
@@ -98,11 +148,9 @@ final class NumbersOverlay {
                 $0.frame.contains(NSEvent.mouseLocation)
             }) ?? NSScreen.main
         else {
-            debug("NumbersOverlay.show: no screen")
+            debug("NumbersOverlay.present: no screen")
             return
         }
-
-        model.mode = mode
         anchorWindow(to: currentScreen)
         recomputeIndices(mouseLocation: NSEvent.mouseLocation)
         reanchorIfNeeded(mouseLocation: NSEvent.mouseLocation)
@@ -128,11 +176,6 @@ final class NumbersOverlay {
         window?.orderFrontRegardless()
 
         installMouseMonitorIfNeeded()
-    }
-
-    func hide() {
-        window?.orderOut(nil)
-        removeMouseMonitor()
     }
 
     /// Warp the cursor to the centre of the cell currently highlighted by
@@ -223,19 +266,9 @@ final class NumbersOverlay {
         window?.setFrame(Self.rectForScreen(screen), display: true)
     }
 
-    private func switchMode(to mode: Mode) {
-        model.mode = mode
-        if mode == .relative {
-            installMouseMonitorIfNeeded()
-            recomputeIndices(mouseLocation: NSEvent.mouseLocation)
-        } else {
-            // Absolute mode doesn't care about cursor position; drop the
-            // global monitor to keep the overhead at zero.
-            removeMouseMonitor()
-        }
-    }
-
     private func installMouseMonitorIfNeeded() {
+        //IMPORTANT: This is needed as to not stack additional events to monitors/displays that already have one
+        guard mouseMonitor == nil else { return }
         let mask: NSEvent.EventTypeMask = [
             .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
         ]
@@ -246,7 +279,9 @@ final class NumbersOverlay {
             Task { @MainActor in
                 let location = NSEvent.mouseLocation
                 self.reanchorIfNeeded(mouseLocation: location)
-                if model.mode == .relative {
+                // Recompute when anything cursor-following is active:
+                // relative labels, or either band option.
+                if model.mode == .relative || !model.options.isEmpty {
                     self.recomputeIndices(mouseLocation: location)
                 }
             }
@@ -339,13 +374,47 @@ struct NumbersOverlayView: View {
             height: max(0, outer.height - 2 * inset)
         )
         ZStack(alignment: .topLeading) {
-            rowGutter(totalHeight: inner.height)
+            // Highlight bands first → row gutter + column strip draw on top
+            // so labels stay legible over the tint. Bands span the full
+            // inner rect (inset-adjusted screen), not just the gutter/strip
+            // — that's the difference between "highlight the label" and
+            // "highlight the line" (nvim's `:set cursorline`).
+            cursorlineBand(inner: inner)
                 .offset(x: inset, y: inset)
-            columnStrip(totalWidth: inner.width)
+            cursorcolumnBand(inner: inner)
                 .offset(x: inset, y: inset)
+            // Labels render only when a number mode is active. `.off`
+            // keeps the window up for standalone band display
+            // (`:cursorline` / `:cursorcolumn` without numbers).
+            if model.mode != .off {
+                rowGutter(totalHeight: inner.height)
+                    .offset(x: inset, y: inset)
+                columnStrip(totalWidth: inner.width)
+                    .offset(x: inset, y: inset)
+            }
         }
         .frame(width: outer.width, height: outer.height, alignment: .topLeading)
         .ignoresSafeArea(.all)
+    }
+
+    @ViewBuilder
+    private func cursorlineBand(inner: CGSize) -> some View {
+        if model.options.contains(.cursorline) {
+            Rectangle()
+                .fill(Color.yellow.opacity(0.18))
+                .frame(width: inner.width, height: model.stepY)
+                .offset(y: CGFloat(model.currentLineIndex) * model.stepY)
+        }
+    }
+
+    @ViewBuilder
+    private func cursorcolumnBand(inner: CGSize) -> some View {
+        if model.options.contains(.cursorcolumn) {
+            Rectangle()
+                .fill(Color.yellow.opacity(0.18))
+                .frame(width: model.stepX, height: inner.height)
+                .offset(x: CGFloat(model.currentColumnIndex) * model.stepX)
+        }
     }
 
     @ViewBuilder
@@ -403,6 +472,7 @@ struct NumbersOverlayView: View {
             return i == model.currentLineIndex
                 ? "\(i + 1)"
                 : "\(abs(i - model.currentLineIndex))"
+        case .off: return ""
         }
     }
 
@@ -413,6 +483,7 @@ struct NumbersOverlayView: View {
             return i == model.currentColumnIndex
                 ? "\(i + 1)"
                 : "\(abs(i - model.currentColumnIndex))"
+        case .off: return ""
         }
     }
 

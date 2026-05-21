@@ -299,23 +299,6 @@ struct NeoMouse: App {
                 switch appState.mode {
                 case .disabled:
                     return
-                // switch event.characters {
-                // case "e":
-                //     guard
-                //         event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                //             == .command
-                //     else {
-                //         return
-                //     }
-                //     appState.mode = .normal(
-                //         currentPendingOperation: .none
-                //     )
-                //     ToastManager.shared.show(
-                //         "Neomouse Activated - Normal Mode")
-                //     return
-                // default:
-                //     return
-                // }
                 case .normal(let currentPendingNormalOperation):
                     switch event.keyCode {
                     case charToKeyCodeMap["Esc"]:
@@ -402,7 +385,9 @@ struct NeoMouse: App {
                     case .goToRegister:
                         guard
                             event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
+                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .shift, .capsLock,
+                                ])
                         else {
                             appState.mode = .normal(
                                 currentPendingOperation: .none
@@ -415,7 +400,9 @@ struct NeoMouse: App {
                     case .registerAction:
                         guard
                             (event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift),
+                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .shift, .capsLock,
+                                ])),
                             case .normal(.registerAction(let activeRegister)) = appState.mode
                         else {
                             appState.mode = .normal(
@@ -425,26 +412,27 @@ struct NeoMouse: App {
                             return
                         }
                         switch event.characters {
-                        // case "c", "x":
-                        //     guard
-                        //         event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                        //             == .command
-                        //     else {
-                        //         break
-                        //     }
-                        //
-                        //     break
                         case "y", "Y":
-                            System.simulate(.copy)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
-                                    debug("Copied item to clipboard: \(Pasteboard.preview(pasteboardItem))")
-                                    Register.set(
-                                        register: activeRegister, item: pasteboardItem, sessionId: currentSession.id!)
-                                }
+                            if appState.isVisual {
+                                CoreOperations.normalYank(
+                                    event: event, currentSession: currentSession, appState: appState)
+                                CoreOperations.registerScreenshot(
+                                    event: event, appState: appState, currentSession: currentSession,
+                                    activeRegister: activeRegister)
+                            } else {
+                                CoreOperations.registerYank(
+                                    event: event, currentSession: currentSession, activeRegister: activeRegister)
                             }
                             break
                         case "d", "D":
+                            guard
+                                (event.modifierFlags.rawValue == 256
+                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                        .shift, .capsLock,
+                                    ]))
+                            else {
+                                break
+                            }
                             System.simulate(.cut)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
@@ -456,6 +444,14 @@ struct NeoMouse: App {
                             }
                             break
                         case "p", "P":
+                            guard
+                                (event.modifierFlags.rawValue == 256
+                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                        .shift, .capsLock,
+                                    ]))
+                            else {
+                                break
+                            }
                             guard
                                 let item = Register.get(register: activeRegister, sessionId: currentSession.id!)?
                                     .pasteboardItem
@@ -722,8 +718,10 @@ struct NeoMouse: App {
                                 x: adjacentScreenRect.midX,
                                 y: adjacentScreenRect.midY)
                             appState.mode = .normal(currentPendingOperation: .none)
-                        } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                            == .control
+                        } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
+                            && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                .control, .shift, .capsLock,
+                            ])
                         {
                             appState.mode = .normal(currentPendingOperation: .ctrlW)
                         } else {
@@ -732,7 +730,11 @@ struct NeoMouse: App {
                         break
                     case "V":
                         appState.isVisual.toggle()
-                        guard appState.isVisual else {
+                        guard appState.isVisual,
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                .shift, .capsLock,
+                            ])
+                        else {
                             exitVisualMode(
                                 appState: appState,
                                 visualHighlightOverlay:
@@ -806,75 +808,9 @@ struct NeoMouse: App {
                             appState.mode = .normal(currentPendingOperation: .none)
                         }
                         break
-                    case "y":
-                        appState.operationCountAsString = nil
-                        guard
-                            event.modifierFlags.rawValue == 256,
-                            appState.isVisual,
-                            let startX = appState.startCGXPoint,
-                            let startY = appState.startCGYPoint,
-                            let endX = appState.endCGXPoint,
-                            let endY = appState.endCGYPoint
-                        else {
-                            //Normal copy to register
-                            appState.mode = .normal(currentPendingOperation: .none)
-                            return
-                        }
-                        let currentVisualHighlightWidth: CGFloat = abs(endX - startX)
-                        let currentVisualHighlightHeight: CGFloat = abs(endY - startY)
-                        let currentVisualHighlightCGRect = CGRect(
-                            x: min(startX, endX),
-                            y: min(startY, endY),
-                            width: currentVisualHighlightWidth,
-                            height: currentVisualHighlightHeight
-                        )
-                        let rect = currentVisualHighlightCGRect
-                        let excludedIDs: [CGWindowID] = [
-                            VisualHighlightOverlay.shared.windowID,
-                            GridOverlay.shared.windowID,
-                        ].compactMap { $0 }
-                        Task { @MainActor in
-                            do {
-                                guard
-                                    let screenshotTaken = try await screenshotMultiDisplay(
-                                        rect: rect, excluding: excludedIDs)
-                                else {
-                                    debug("No screenshotTaken for operation: y")
-                                    appState.mode = .normal(currentPendingOperation: .none)
-                                    appState.isVisual = false
-                                    return
-                                }
-                                let image = NSImage(cgImage: screenshotTaken, size: .zero)
-                                NSSound(named: "Screen Capture")?.play()
-                                NSPasteboard.general.clearContents()
-                                let isCopiedToPasteBoard = NSPasteboard.general.writeObjects([image])
-                                if isCopiedToPasteBoard {
-                                    ToastManager.shared.show("Screenshot copied to clipboard")
-                                }
-
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    if case .normal(.registerAction(let activeRegister)) = appState.mode,
-                                        let pasteboardItem = NSPasteboard.general.pasteboardItems?.first
-                                    {
-                                        Register.set(
-                                            register: activeRegister,
-                                            item: pasteboardItem,
-                                            sessionId: currentSession.id!
-                                        )
-                                        debug(
-                                            "Copied screenshot item to register '\(activeRegister)': \(Pasteboard.preview(pasteboardItem))"
-                                        )
-                                    }
-                                }
-
-                                appState.mode = .normal(currentPendingOperation: .none)
-                                appState.isVisual = false
-                            } catch {
-                                debug("For operation 'y' screenshot failed: \(error)")
-                                appState.mode = .normal(currentPendingOperation: .none)
-                                appState.isVisual = false
-                            }
-                        }
+                    case "y", "Y":
+                        CoreOperations.normalYank(
+                            event: event, currentSession: currentSession, appState: appState)
                         break
                     case "o", "O":
                         appState.operationCountAsString = nil

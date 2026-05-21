@@ -78,7 +78,7 @@ struct VisualHighlightOverlayView: View {
         return AnyView(
             GeometryReader { _ in
                 Rectangle()
-                    .fill(.yellow.opacity(0.3))
+                    .fill(.blue.opacity(0.3))
                     .frame(width: width, height: height)
                     .position(x: centerX, y: centerY)
             }

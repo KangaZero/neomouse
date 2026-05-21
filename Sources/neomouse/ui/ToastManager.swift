@@ -8,6 +8,10 @@ final class ToastManager {
     static let shared = ToastManager()
     private var window: NSPanel?
 
+    var windowID: CGWindowID? {
+        window.map { CGWindowID($0.windowNumber) }
+    }
+
     func show(_ message: String) {
 
         guard

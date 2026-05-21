@@ -14,6 +14,10 @@ final class HelpDialog {
     static let shared = HelpDialog()
     private var window: NSWindow?
 
+    var windowID: CGWindowID? {
+        window.map { CGWindowID($0.windowNumber) }
+    }
+
     func toggle() {
         if let window, window.isVisible {
             hide()
