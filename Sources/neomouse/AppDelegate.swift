@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if appState.isVisual {
-            exitVisualMode(
+            NeoMouse.CoreOperations.exitVisualState(
                 appState: appState,
                 visualHighlightOverlay: VisualHighlightOverlay.shared)
         }

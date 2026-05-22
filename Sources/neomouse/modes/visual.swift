@@ -4,7 +4,7 @@
 // import neomouseUtils
 //
 // @MainActor
-// func exitVisualMode(appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay) {
+// func CoreOperations.exitVisualState(appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay) {
 //     guard appState.startCGXPoint != nil && appState.endCGXPoint != nil else { return }
 //     Mouse.up(.left, at: CGPoint(x: appState.endCGXPoint!, y: appState.endCGYPoint!))
 //     //TODO Eventually use Session.Operations Table
@@ -13,7 +13,7 @@
 //             && appState.endCGXPoint != nil && appState.endCGYPoint != nil
 //     else {
 //         return debug(
-//             "Could not retrieve start or end CG points in exitVisualMode",
+//             "Could not retrieve start or end CG points in CoreOperations.exitVisualState",
 //             "startCGPoint:\(String(describing: appState.startCGXPoint)), \(String(describing: appState.startCGYPoint)), endCGPoint: \(String(describing: appState.endCGXPoint)), \(String(describing: appState.endCGYPoint))"
 //         )
 //     }

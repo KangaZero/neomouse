@@ -171,87 +171,86 @@ extension NeoMouse {
             guard !appState.isVisual else {
                 debug("goToPreviousVisualState: already in visual state, ignoring")
                 return
-
             }
-
-            @MainActor
-            static private func exitVisualMode(
-                appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay
-            ) {
-                guard appState.startCGXPoint != nil && appState.endCGXPoint != nil else { return }
-                Mouse.up(.left, at: CGPoint(x: appState.endCGXPoint!, y: appState.endCGYPoint!))
-                //TODO Eventually use Session.Operations Table
-                guard
-                    appState.startCGXPoint != nil && appState.startCGYPoint != nil
-                        && appState.endCGXPoint != nil && appState.endCGYPoint != nil
-                else {
-                    return debug(
-                        "Could not retrieve start or end CG points in exitVisualMode",
-                        "startCGPoint:\(String(describing: appState.startCGXPoint)), \(String(describing: appState.startCGYPoint)), endCGPoint: \(String(describing: appState.endCGXPoint)), \(String(describing: appState.endCGYPoint))"
-                    )
-                }
-                appState.previousVisualStartCGXPoint = appState.startCGXPoint
-                appState.previousVisualStartCGYPoint = appState.startCGYPoint
-                appState.previousVisualEndCGXPoint = appState.endCGXPoint
-                appState.previousVisualEndCGYPoint = appState.endCGYPoint
-                appState.startCGXPoint = nil
-                appState.startCGYPoint = nil
-                appState.endCGXPoint = nil
-                appState.endCGYPoint = nil
-                visualHighlightOverlay.hideOverlay()
-                appState.mode = .normal(
-                    currentPendingOperation: .none
+        }
+        @MainActor
+        static func exitVisualState(
+            appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay
+        ) {
+            guard appState.startCGXPoint != nil && appState.endCGXPoint != nil else { return }
+            Mouse.up(.left, at: CGPoint(x: appState.endCGXPoint!, y: appState.endCGYPoint!))
+            //TODO Eventually use Session.Operations Table
+            guard
+                appState.startCGXPoint != nil && appState.startCGYPoint != nil
+                    && appState.endCGXPoint != nil && appState.endCGYPoint != nil
+            else {
+                return debug(
+                    "Could not retrieve start or end CG points in exitVisualState",
+                    "startCGPoint:\(String(describing: appState.startCGXPoint)), \(String(describing: appState.startCGYPoint)), endCGPoint: \(String(describing: appState.endCGXPoint)), \(String(describing: appState.endCGYPoint))"
                 )
-                appState.operationCountAsString = nil
-
             }
+            appState.previousVisualStartCGXPoint = appState.startCGXPoint
+            appState.previousVisualStartCGYPoint = appState.startCGYPoint
+            appState.previousVisualEndCGXPoint = appState.endCGXPoint
+            appState.previousVisualEndCGYPoint = appState.endCGYPoint
+            appState.startCGXPoint = nil
+            appState.startCGYPoint = nil
+            appState.endCGXPoint = nil
+            appState.endCGYPoint = nil
+            visualHighlightOverlay.hideOverlay()
+            appState.mode = .normal(
+                currentPendingOperation: .none
+            )
+            appState.operationCountAsString = nil
 
-            @MainActor
-            static func toggleVisualState(
-                event: NSEvent, appState: NeoMouseState,
-                currentPendingNormalOperation: NeomouseType.NormalModePendingOperation,
-                currentCGPoint: CGPoint
-            ) {
-                appState.operationCountAsString = nil
-                guard event.modifierFlags.rawValue == 256 else {
-                    debug("toggleVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
-                    return appState.mode = .normal(currentPendingOperation: .none)
-                }
-                appState.isVisual.toggle()
-                guard appState.isVisual else {
-                    Self.exitVisualMode(
-                        appState: appState,
-                        visualHighlightOverlay:
-                            VisualHighlightOverlay.shared)
-                    return
-                }
-                // if currentPendingNormalOperation == .g
-                //     && appState.previousVisualStartCGXPoint != nil
-                //     && appState.previousVisualStartCGYPoint != nil
-                //     && appStatgg reviousVisualEndCGXPoint != nil
-                //     && appState.previousVisualEndCGYPoint != nil
-                // {
-                //     // Mouse.down(.left, at: currentCGPoint)
-                //     appState.startCGXPoint = appState.previousVisualStartCGXPoint
-                //     appState.startCGYPoint = appState.previousVisualStartCGYPoint
-                //     appState.endCGXPoint = appState.previousVisualEndCGXPoint
-                //     appState.endCGYPoint = appState.previousVisualEndCGYPoint
-                //     VisualHighlightOverlay.shared.passAppState(state: appState)
-                //     Mouse.moveToGlobal(
-                //         x: appState.endCGXPoint!,
-                //         y: appState.endCGYPoint!)
-                //     appState.mode = .normal(currentPendingOperation: .none)
-                // } else {
-                //Go to Visual state
-                // Mouse.down(.left, at: currentCGPoint)
-                appState.startCGXPoint = currentCGPoint.x
-                appState.startCGYPoint = currentCGPoint.y
-                appState.endCGXPoint = currentCGPoint.x
-                appState.endCGYPoint = currentCGPoint.y
-                VisualHighlightOverlay.shared.passAppState(state: appState)
-                appState.mode = .normal(currentPendingOperation: .none)
-                // }
+        }
+
+        @MainActor
+        static func toggleVisualState(
+            event: NSEvent, appState: NeoMouseState,
+            currentPendingNormalOperation: NeomouseType.NormalModePendingOperation,
+            currentCGPoint: CGPoint,
+            visualHighlightOverlay: VisualHighlightOverlay
+        ) {
+            appState.operationCountAsString = nil
+            guard event.modifierFlags.rawValue == 256 else {
+                debug("toggleVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
+                return appState.mode = .normal(currentPendingOperation: .none)
             }
+            appState.isVisual.toggle()
+            guard appState.isVisual else {
+                exitVisualState(
+                    appState: appState,
+                    visualHighlightOverlay:
+                        VisualHighlightOverlay.shared)
+                return
+            }
+            // if currentPendingNormalOperation == .g
+            //     && appState.previousVisualStartCGXPoint != nil
+            //     && appState.previousVisualStartCGYPoint != nil
+            //     && appStatgg reviousVisualEndCGXPoint != nil
+            //     && appState.previousVisualEndCGYPoint != nil
+            // {
+            //     // Mouse.down(.left, at: currentCGPoint)
+            //     appState.startCGXPoint = appState.previousVisualStartCGXPoint
+            //     appState.startCGYPoint = appState.previousVisualStartCGYPoint
+            //     appState.endCGXPoint = appState.previousVisualEndCGXPoint
+            //     appState.endCGYPoint = appState.previousVisualEndCGYPoint
+            //     VisualHighlightOverlay.shared.passAppState(state: appState)
+            //     Mouse.moveToGlobal(
+            //         x: appState.endCGXPoint!,
+            //         y: appState.endCGYPoint!)
+            //     appState.mode = .normal(currentPendingOperation: .none)
+            // } else {
+            // Mouse.down(.left, at: currentCGPoint)
+            //Go to Visual state
+            appState.startCGXPoint = currentCGPoint.x
+            appState.startCGYPoint = currentCGPoint.y
+            appState.endCGXPoint = currentCGPoint.x
+            appState.endCGYPoint = currentCGPoint.y
+            VisualHighlightOverlay.shared.passAppState(state: appState)
+            appState.mode = .normal(currentPendingOperation: .none)
+            // }
         }
     }
 }

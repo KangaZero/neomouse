@@ -281,7 +281,7 @@ struct NeoMouse: App {
                         return
                     } else {
                         if appState.isVisual {
-                            exitVisualMode(
+                            CoreOperations.exitVisualState(
                                 appState: appState,
                                 visualHighlightOverlay:
                                     VisualHighlightOverlay.shared)
@@ -305,7 +305,7 @@ struct NeoMouse: App {
                             break
                         }
                         if appState.isVisual {
-                            exitVisualMode(
+                            CoreOperations.exitVisualState(
                                 appState: appState,
                                 visualHighlightOverlay:
                                     VisualHighlightOverlay.shared)
@@ -354,14 +354,18 @@ struct NeoMouse: App {
                             }
                         case "v":
                             if appState.isVisual {
-                                CoreOperations.exitVisualMode(
+                                CoreOperations.exitVisualState(
                                     appState: appState,
                                     visualHighlightOverlay:
                                         VisualHighlightOverlay.shared)
                             } else {
-CoreOperations.goToPreviousVisualState(event: event, appState: appState, currentPendingOperation: currentPendingNormalOperation)
+                                CoreOperations.goToPreviousVisualState(
+                                    event: event, appState: appState,
+                                    currentPendingNormalOperation: currentPendingNormalOperation)
                             }
                             break
+                    default:
+                        break
                         }
                         break
                     case .gg:
@@ -379,7 +383,8 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                             CoreOperations.toggleVisualState(
                                 event: event, appState: appState,
                                 currentPendingNormalOperation: currentPendingNormalOperation,
-                                currentCGPoint: currentCGPoint
+                                currentCGPoint: currentCGPoint,
+                                visualHighlightOverlay: VisualHighlightOverlay.shared
                             )
                             appState.mode = .normal(
                                 currentPendingOperation: .ggv
@@ -392,6 +397,8 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                     case .ggy:
                         guard
                             event.characters == "G"
+                                // INFO: This should never happen as .ggy can only be set in !appState.isVisual, but added in just in case
+                                && !appState.isVisual
                                 && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
                                     .shift, .capsLock,
                                 ])
@@ -406,6 +413,10 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                                 let screenshotTaken = try await screenshot(
                                     rect: currentDisplayBounds, excluding: CoreOperations.excludedWindowIDsForScreenshot
                                 )
+                                guard let screenshot = screenshotTaken else {
+                                    debug("ggyG screenshot failed: \(screenshotTaken)")
+                                    return
+                                }
                                 CoreOperations.registerCurrentPasteboardItem(
                                     currentSession: currentSession,
                                     activeRegister: "0")
@@ -413,6 +424,8 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                                 debug("ggy screenshot failed: \(error)")
                             }
                         }
+                        break
+                    case .ggv:
                         break
                     case .setMark:
                         guard
@@ -576,7 +589,7 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                     //     }
                     //     //TODO make this into a reusable fn disableNeoMouse
                     //     if appState.isVisual {
-                    //         exitVisualMode(
+                    //         CoreOperations.exitVisualState(
                     //             appState: appState,
                     //             visualHighlightOverlay:
                     //                 VisualHighlightOverlay.shared)
@@ -800,7 +813,7 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                                 .shift, .capsLock,
                             ])
                         else {
-                            exitVisualMode(
+                            CoreOperations.exitVisualState(
                                 appState: appState,
                                 visualHighlightOverlay:
                                     VisualHighlightOverlay.shared)
@@ -836,7 +849,9 @@ CoreOperations.goToPreviousVisualState(event: event, appState: appState, current
                     case "v":
                         CoreOperations.toggleVisualState(
                             event: event, appState: appState,
-                            currentPendingNormalOperation: currentPendingNormalOperation, currentCGPoint: currentCGPoint
+                            currentPendingNormalOperation: currentPendingNormalOperation,
+                            currentCGPoint: currentCGPoint,
+                            visualHighlightOverlay: VisualHighlightOverlay.shared
                         )
                         break
                     case "y", "Y":
