@@ -31,7 +31,7 @@ public enum Mouse {
     /// cursor as part of dispatch — replaces `CGWarpMouseCursorPosition` so
     /// observers of the event stream (overlay listeners, accessibility tools,
     /// target apps) see the move.
-    public static func moveToGlobal(x: CGFloat, y: CGFloat) {
+    public static func moveToGlobal(x: CGFloat, y: CGFloat, isMoveToScreenLocal: Bool = false) {
         let point = CGPoint(x: x, y: y)
         let src = eventSource()
         let leftDown = CGEventSource.buttonState(.hidSystemState, button: .left)
@@ -43,7 +43,9 @@ public enum Mouse {
                 ? .rightMouseDragged
                 : .mouseMoved
         let button: CGMouseButton = leftDown ? .left : rightDown ? .right : .left
-        debug("Mouse.moveToGlobal x:\(x), y:\(y), type:\(type), button:\(button)")
+        if !isMoveToScreenLocal {
+            debug("Mouse.moveToGlobal x:\(x), y:\(y), type:\(type), button:\(button)")
+        }
         CGEvent(
             mouseEventSource: src, mouseType: type,
             mouseCursorPosition: point, mouseButton: button
@@ -64,7 +66,7 @@ public enum Mouse {
             return
         }
         let bounds = CGDisplayBounds(display)
-        moveToGlobal(x: bounds.origin.x + x, y: bounds.origin.y + y)
+        moveToGlobal(x: bounds.origin.x + x, y: bounds.origin.y + y, isMoveToScreenLocal: true)
         debug("Mouse.moveToScreenLocal global x:\(bounds.origin.x + x), y:\(bounds.origin.y + y)")
     }
 

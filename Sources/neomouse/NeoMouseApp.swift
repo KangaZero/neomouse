@@ -305,6 +305,7 @@ struct NeoMouse: App {
                             break
                         }
                         if appState.isVisual {
+                            debug("Esc pressed in visual mode, exiting visual state")
                             CoreOperations.exitVisualState(
                                 appState: appState,
                                 visualHighlightOverlay:
@@ -323,7 +324,13 @@ struct NeoMouse: App {
                     case .g:
                         switch event.characters {
                         case "g":
-                            if operationCount >= 1 {
+                            guard event.modifierFlags.rawValue == 256 else {
+                                return debug("gg contains a modifier, ignoring")
+                            }
+                            if operationCount > 1 {
+                                debug(
+                                    ".g - with operationCount=\(operationCount) > 1, operation gg and currentPendingOperation set to .none"
+                                )
                                 let _ggUsable = CGRect(
                                     x: appState.gridInset,
                                     y: appState.gridInset,
@@ -341,8 +348,11 @@ struct NeoMouse: App {
                                     currentPendingOperation: .none
                                 )
                                 appState.operationCountAsString = nil
-                                break
+                                return
                             } else {
+                                debug(
+                                    ".g - with operationCount=\(operationCount) <= 1, operation gg and currentPendingOperation set to .gg"
+                                )
                                 let target = MotionTarget.top(
                                     localX: localCGPoint.x,
                                     gridInset: appState.gridInset)
@@ -350,22 +360,26 @@ struct NeoMouse: App {
                                 appState.mode = .normal(
                                     currentPendingOperation: .gg
                                 )
-                                break
+                                return
                             }
                         case "v":
                             if appState.isVisual {
+                                debug(
+                                    ".g - operation gv and isVisual=true, exiting visual state and setting currentPendingOperation to .none, operationCount reset to nil"
+                                )
                                 CoreOperations.exitVisualState(
                                     appState: appState,
                                     visualHighlightOverlay:
                                         VisualHighlightOverlay.shared)
                             } else {
+                                debug(".g - operation gv and isVisual=false, goToPreviousVisualState")
                                 CoreOperations.goToPreviousVisualState(
                                     event: event, appState: appState,
                                     currentPendingNormalOperation: currentPendingNormalOperation)
                             }
+                            return
+                        default:
                             break
-                    default:
-                        break
                         }
                         break
                     case .gg:
@@ -426,6 +440,26 @@ struct NeoMouse: App {
                         }
                         break
                     case .ggv:
+                        guard
+                            event.characters == "G"
+                                // INFO: This should happen as .ggv will set appState.isVisual to true, but added in just in case
+                                && appState.isVisual
+                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .shift, .capsLock,
+                                ])
+                        else {
+                            appState.operationCountAsString = nil
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none
+                            )
+                        }
+                        appState.startCGXPoint = currentDisplayBounds.origin.x
+                        appState.startCGYPoint = currentDisplayBounds.origin.y
+                        appState.endCGXPoint = currentDisplayBounds.origin.x + currentDisplayBounds.size.width
+                        appState.endCGYPoint = currentDisplayBounds.origin.y + currentDisplayBounds.size.height
+                        debug(
+                            "ggyG visual state: start(\(appState.startCGXPoint!), \(appState.startCGYPoint!)) end(\(appState.endCGXPoint!), \(appState.endCGYPoint!))"
+                        )
                         break
                     case .setMark:
                         guard

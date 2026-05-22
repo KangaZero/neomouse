@@ -5,9 +5,7 @@ import neomouseUtils
 import neomouseTypes
 import neomouseDB
 
-// @MainActor
 extension NeoMouse {
-    //TODO decide whether to move to neomouseUtils instead
     public enum CoreOperations {
         @MainActor
         public static let excludedWindowIDsForScreenshot: [CGWindowID] = [
@@ -22,6 +20,8 @@ extension NeoMouse {
         @MainActor
         static func normalYank(event: NSEvent, currentSession: Session, appState: NeoMouseState) {
             appState.operationCountAsString = nil
+            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
+            //As functions should ideally just do one thing
             guard
                 (event.modifierFlags.rawValue == 256
                     || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
@@ -78,6 +78,8 @@ extension NeoMouse {
 
         @MainActor
         static func registerYank(event: NSEvent, currentSession: Session, activeRegister: String) {
+            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
+            //As functions should ideally just do one thing
             guard
                 (event.modifierFlags.rawValue == 256
                     || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
@@ -87,7 +89,8 @@ extension NeoMouse {
                 return
             }
             System.simulate(.copy)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+
+            DispatchQueue.main.async {
                 if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
                     debug("Copied item to clipboard: \(Pasteboard.preview(pasteboardItem))")
                     Register.set(
@@ -101,7 +104,7 @@ extension NeoMouse {
         static func registerCurrentPasteboardItem(
             currentSession: Session, activeRegister: String
         ) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            DispatchQueue.main.async {
                 if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
                     Register.set(
                         register: activeRegister,
@@ -117,11 +120,12 @@ extension NeoMouse {
                     )
                 }
             }
-
         }
 
         @MainActor
         static func delete(event: NSEvent, appState: NeoMouseState, currentSession: Session) {
+            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
+            //As functions should ideally just do one thing
             guard
                 (event.modifierFlags.rawValue == 256
                     || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
@@ -133,10 +137,49 @@ extension NeoMouse {
             System.simulate(.cut)
         }
 
+        //MARK: Register related operations
+
+        @MainActor
+        static func registerCurrentPasteboardItemToSystemRegister(
+            currentSession: Session, systemRegister: String = "+"
+        ) {
+            DispatchQueue.main.async {
+                if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
+                    Register.set(
+                        register: systemRegister,
+                        item: pasteboardItem,
+                        sessionId: currentSession.id!
+                    )
+                    debug(
+                        "registerCurrentPasteboardItemToSystemRegister - Copied pasteboard item to register '\(systemRegister)': \(Pasteboard.preview(pasteboardItem))"
+                    )
+                } else {
+                    debug(
+                        "registerCurrentPasteboardItemToSystemRegister - No pasteboard item found to copy to register '\(systemRegister)'"
+                    )
+                }
+            }
+        }
+
+        @MainActor
+        static func writeSystemRegistesToPasteboard(currentSession: Session, systemRegister: String = "+") {
+            guard
+                let item = Register.get(register: systemRegister, sessionId: currentSession.id!)?
+                    .pasteboardItem
+            else {
+                debug("writeSystemRegistesToPasteboard: register '\(systemRegister)' empty")
+                return
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([item])
+        }
+
         @MainActor
         static func pasteFromRegister(
             event: NSEvent, appState: NeoMouseState, currentSession: Session, activeRegister: String
         ) {
+            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
+            //As functions should ideally just do one thing
             guard
                 (event.modifierFlags.rawValue == 256
                     || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
@@ -154,7 +197,7 @@ extension NeoMouse {
             }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([item])
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            DispatchQueue.main.async {
                 System.simulate(.paste)
             }
         }
@@ -164,6 +207,8 @@ extension NeoMouse {
             event: NSEvent, appState: NeoMouseState,
             currentPendingNormalOperation: NeomouseType.NormalModePendingOperation
         ) {
+            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
+            //As functions should ideally just do one thing
             guard event.modifierFlags.rawValue == 256 else {
                 debug("goToPreviousVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
                 return
@@ -172,7 +217,31 @@ extension NeoMouse {
                 debug("goToPreviousVisualState: already in visual state, ignoring")
                 return
             }
+            guard
+                appState.previousVisualStartCGXPoint != nil && appState.previousVisualStartCGYPoint != nil
+                    && appState.previousVisualEndCGXPoint != nil && appState.previousVisualEndCGYPoint != nil
+            else {
+                debug("goToPreviousVisualState: previous visual state CG points not found, ignoring")
+                return
+            }
+            appState.isVisual = true
+            appState.startCGXPoint = appState.previousVisualStartCGXPoint
+            appState.startCGYPoint = appState.previousVisualStartCGYPoint
+            appState.endCGXPoint = appState.previousVisualEndCGXPoint
+            appState.endCGYPoint = appState.previousVisualEndCGYPoint
+            VisualHighlightOverlay.shared.passAppState(state: appState)
+            Mouse.moveToGlobal(
+                x: appState.endCGXPoint!,
+                y: appState.endCGYPoint!)
+            appState.mode = .normal(currentPendingOperation: .none)
+            appState.operationCountAsString = nil
         }
+
+        /// Sets previousVisualCGPoints with the current CG points,
+        /// clears current CG points,
+        /// sets NeomouseState isVisual to false
+        /// hides visual overlay
+        /// lastly sets mode to normal with no pending operation and clears operationCountAsString
         @MainActor
         static func exitVisualState(
             appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay
@@ -197,12 +266,11 @@ extension NeoMouse {
             appState.startCGYPoint = nil
             appState.endCGXPoint = nil
             appState.endCGYPoint = nil
+            //IMPORTANT: must set isVisual to false!
+            appState.isVisual = false
             visualHighlightOverlay.hideOverlay()
-            appState.mode = .normal(
-                currentPendingOperation: .none
-            )
+            appState.mode = .normal(currentPendingOperation: .none)
             appState.operationCountAsString = nil
-
         }
 
         @MainActor
@@ -213,9 +281,12 @@ extension NeoMouse {
             visualHighlightOverlay: VisualHighlightOverlay
         ) {
             appState.operationCountAsString = nil
+            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
+            //As functions should ideally just do one thing
             guard event.modifierFlags.rawValue == 256 else {
                 debug("toggleVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
-                return appState.mode = .normal(currentPendingOperation: .none)
+                appState.mode = .normal(currentPendingOperation: .none)
+                return appState.operationCountAsString = nil
             }
             appState.isVisual.toggle()
             guard appState.isVisual else {
@@ -225,32 +296,12 @@ extension NeoMouse {
                         VisualHighlightOverlay.shared)
                 return
             }
-            // if currentPendingNormalOperation == .g
-            //     && appState.previousVisualStartCGXPoint != nil
-            //     && appState.previousVisualStartCGYPoint != nil
-            //     && appStatgg reviousVisualEndCGXPoint != nil
-            //     && appState.previousVisualEndCGYPoint != nil
-            // {
-            //     // Mouse.down(.left, at: currentCGPoint)
-            //     appState.startCGXPoint = appState.previousVisualStartCGXPoint
-            //     appState.startCGYPoint = appState.previousVisualStartCGYPoint
-            //     appState.endCGXPoint = appState.previousVisualEndCGXPoint
-            //     appState.endCGYPoint = appState.previousVisualEndCGYPoint
-            //     VisualHighlightOverlay.shared.passAppState(state: appState)
-            //     Mouse.moveToGlobal(
-            //         x: appState.endCGXPoint!,
-            //         y: appState.endCGYPoint!)
-            //     appState.mode = .normal(currentPendingOperation: .none)
-            // } else {
-            // Mouse.down(.left, at: currentCGPoint)
-            //Go to Visual state
+            //Enter visual state
             appState.startCGXPoint = currentCGPoint.x
             appState.startCGYPoint = currentCGPoint.y
             appState.endCGXPoint = currentCGPoint.x
             appState.endCGYPoint = currentCGPoint.y
             VisualHighlightOverlay.shared.passAppState(state: appState)
-            appState.mode = .normal(currentPendingOperation: .none)
-            // }
         }
     }
 }
