@@ -320,6 +320,50 @@ struct NeoMouse: App {
                     default: break
                     }
                     switch currentPendingNormalOperation {
+                    case .g:
+                        switch event.characters {
+                        case "g":
+                            if operationCount >= 1 {
+                                let _ggUsable = CGRect(
+                                    x: appState.gridInset,
+                                    y: appState.gridInset,
+                                    width: max(0, currentScreenSize.width - 2 * appState.gridInset),
+                                    height: max(0, currentScreenSize.height - 2 * appState.gridInset)
+                                )
+                                let target = MotionTarget.toLineCount(
+                                    localX: localCGPoint.x,
+                                    screenHeight: currentScreenSize.height,
+                                    gridInset: appState.gridInset,
+                                    rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
+                                    count: operationCount)
+                                Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                                appState.mode = .normal(
+                                    currentPendingOperation: .none
+                                )
+                                appState.operationCountAsString = nil
+                                break
+                            } else {
+                                let target = MotionTarget.top(
+                                    localX: localCGPoint.x,
+                                    gridInset: appState.gridInset)
+                                Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                                appState.mode = .normal(
+                                    currentPendingOperation: .gg
+                                )
+                                break
+                            }
+                        case "v":
+                            if appState.isVisual {
+                                CoreOperations.exitVisualMode(
+                                    appState: appState,
+                                    visualHighlightOverlay:
+                                        VisualHighlightOverlay.shared)
+                            } else {
+CoreOperations.goToPreviousVisualState(event: event, appState: appState, currentPendingOperation: currentPendingNormalOperation)
+                            }
+                            break
+                        }
+                        break
                     case .gg:
                         switch (event.characters, appState.isVisual) {
                         case ("y", false):
@@ -692,40 +736,40 @@ struct NeoMouse: App {
                         }
                         //TODO move over to currentPendingOperation switch case statement
                         // "g" instead of "gg" as the following "g" is only appended/updated onto appState after current MainActor event
-                        if operationCount >= 1 && currentPendingNormalOperation == .g {
-                            let _ggUsable = CGRect(
-                                x: appState.gridInset,
-                                y: appState.gridInset,
-                                width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                                height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                            )
-                            let target = MotionTarget.toLineCount(
-                                localX: localCGPoint.x,
-                                screenHeight: currentScreenSize.height,
-                                gridInset: appState.gridInset,
-                                rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
-                                count: operationCount)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                            appState.mode = .normal(
-                                currentPendingOperation: .none
-                            )
-                            appState.operationCountAsString = nil
-                            break
-                        } else if currentPendingNormalOperation == .g {
-                            let target = MotionTarget.top(
-                                localX: localCGPoint.x,
-                                gridInset: appState.gridInset)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                            appState.mode = .normal(
-                                currentPendingOperation: .gg
-                            )
-                            //TODO dont reset normal mode just yet, need to account for ggvG
-                            //TODO Remove below when v is added
-                            // appState.mode = .normal(
-                            //     currentPendingOperation: .none
-                            // )
-                            break
-                        }
+                        // if operationCount >= 1 && currentPendingNormalOperation == .g {
+                        //     let _ggUsable = CGRect(
+                        //         x: appState.gridInset,
+                        //         y: appState.gridInset,
+                        //         width: max(0, currentScreenSize.width - 2 * appState.gridInset),
+                        //         height: max(0, currentScreenSize.height - 2 * appState.gridInset)
+                        //     )
+                        //     let target = MotionTarget.toLineCount(
+                        //         localX: localCGPoint.x,
+                        //         screenHeight: currentScreenSize.height,
+                        //         gridInset: appState.gridInset,
+                        //         rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
+                        //         count: operationCount)
+                        //     Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                        //     appState.mode = .normal(
+                        //         currentPendingOperation: .none
+                        //     )
+                        //     appState.operationCountAsString = nil
+                        //     break
+                        // } else if currentPendingNormalOperation == .g {
+                        //     let target = MotionTarget.top(
+                        //         localX: localCGPoint.x,
+                        //         gridInset: appState.gridInset)
+                        //     Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                        //     appState.mode = .normal(
+                        //         currentPendingOperation: .gg
+                        //     )
+                        //     //TODO dont reset normal mode just yet, need to account for ggvG
+                        //     //TODO Remove below when v is added
+                        //     // appState.mode = .normal(
+                        //     //     currentPendingOperation: .none
+                        //     // )
+                        //     break
+                        // }
                         break
                     case "w", "W", "\u{17}":
                         if currentPendingNormalOperation == .ctrlW {
