@@ -35,6 +35,10 @@ public enum MotionTarget {
         CGPoint(x: localX, y: screenHeight - gridInset)
     }
 
+    public static func bottomRightEdge(screenWidth: CGFloat, screenHeight: CGFloat, gridInset: CGFloat) -> CGPoint {
+        CGPoint(x: screenWidth - gridInset, y: screenHeight - gridInset)
+    }
+
     /// `M` — vertical centre (mid-height) of the current screen.
     public static func verticalMiddle(localX: CGFloat, screenHeight: CGFloat) -> CGPoint {
         CGPoint(x: localX, y: screenHeight / 2)
@@ -86,6 +90,7 @@ public enum MotionIntent: Equatable {
     case goBottom  // G
     case goLeftEdge  // 0
     case goRightEdge  // $
+    case goBottomRightEdge  // ggvG
     case goVerticalMiddle  // M
     case goHorizontalMiddle  // gm
     case goLineCount(Int)  // Ng

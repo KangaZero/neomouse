@@ -19,7 +19,7 @@ extension NeoMouse {
 
         @MainActor
         static func normalYank(event: NSEvent, currentSession: Session, appState: NeoMouseState) {
-            appState.operationCountAsString = nil
+            // appState.operationCountAsString = nil
             //TODO: consider moving modifier flag check to caller (NeoMouseApp)
             //As functions should ideally just do one thing
             guard
@@ -34,7 +34,7 @@ extension NeoMouse {
                 let endY = appState.endCGYPoint
             else {
                 //Normal copy to register
-                appState.mode = .normal(currentPendingOperation: .none)
+                appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                 return
             }
             let currentVisualHighlightWidth: CGFloat = abs(endX - startX)
@@ -54,7 +54,7 @@ extension NeoMouse {
                             rect: rect, excluding: Self.excludedWindowIDsForScreenshot)
                     else {
                         debug("No screenshotTaken for operation: y")
-                        appState.mode = .normal(currentPendingOperation: .none)
+                        appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                         appState.isVisual = false
                         return
                     }
@@ -66,11 +66,11 @@ extension NeoMouse {
                         ToastManager.shared.show("Screenshot copied to clipboard")
                     }
 
-                    appState.mode = .normal(currentPendingOperation: .none)
+                    appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                     appState.isVisual = false
                 } catch {
                     debug("For operation 'y' screenshot failed: \(error)")
-                    appState.mode = .normal(currentPendingOperation: .none)
+                    appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                     appState.isVisual = false
                 }
             }
@@ -233,8 +233,8 @@ extension NeoMouse {
             Mouse.moveToGlobal(
                 x: appState.endCGXPoint!,
                 y: appState.endCGYPoint!)
-            appState.mode = .normal(currentPendingOperation: .none)
-            appState.operationCountAsString = nil
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+            // appState.operationCountAsString = nil
         }
 
         /// Sets previousVisualCGPoints with the current CG points,
@@ -269,8 +269,8 @@ extension NeoMouse {
             //IMPORTANT: must set isVisual to false!
             appState.isVisual = false
             visualHighlightOverlay.hideOverlay()
-            appState.mode = .normal(currentPendingOperation: .none)
-            appState.operationCountAsString = nil
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+            // appState.operationCountAsString = nil
         }
 
         @MainActor
@@ -280,13 +280,13 @@ extension NeoMouse {
             currentCGPoint: CGPoint,
             visualHighlightOverlay: VisualHighlightOverlay
         ) {
-            appState.operationCountAsString = nil
+            // appState.operationCountAsString = nil
             //TODO: consider moving modifier flag check to caller (NeoMouseApp)
             //As functions should ideally just do one thing
             guard event.modifierFlags.rawValue == 256 else {
                 debug("toggleVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
-                appState.mode = .normal(currentPendingOperation: .none)
-                return appState.operationCountAsString = nil
+                return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                // return appState.operationCountAsString = nil
             }
             appState.isVisual.toggle()
             guard appState.isVisual else {
@@ -301,6 +301,7 @@ extension NeoMouse {
             appState.startCGYPoint = currentCGPoint.y
             appState.endCGXPoint = currentCGPoint.x
             appState.endCGYPoint = currentCGPoint.y
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             VisualHighlightOverlay.shared.passAppState(state: appState)
         }
     }

@@ -44,7 +44,8 @@ public struct NeomouseType {
         // ``` pressed, awaiting set mark to go to exact location with exact visual state for said mark
         case goToMarkExactState
         case goToRegister  // " pressed, awaiting register name to go to
-        case registerAction(register: String)
+        case registerAction(register: String)  // After " and register name,
+        // awaiting operation to perform with said register
         //TODO nice to have
         // case setMacro // 'q' pressed, awaiting macro name
         // case goToMacro // '@' pressed, awaiting set macro name to go to
@@ -56,6 +57,7 @@ public struct NeomouseType {
         case disabled
         case normal(
             currentPendingOperation: NormalModePendingOperation,
+            operationCountAsString: String?
         )
         case find(
             currentPendingOperation: String?,

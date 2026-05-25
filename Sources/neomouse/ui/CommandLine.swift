@@ -128,28 +128,28 @@ final class CommandLine {
         switch command {
         case .help, .h:
             //NOTE: Order is important here: the help dialog is only available in normal mode
-            appState.mode = .normal(currentPendingOperation: .none)
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             HelpDialog.shared.toggle()
             return
         case .numbers, .nu:
             NumbersOverlay.shared.passAppState(state: appState)
             NumbersOverlay.shared.toggle(mode: .absolute)
-            appState.mode = .normal(currentPendingOperation: .none)
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
         case .relativenumbers, .rnu:
             NumbersOverlay.shared.passAppState(state: appState)
             NumbersOverlay.shared.toggle(mode: .relative)
-            appState.mode = .normal(currentPendingOperation: .none)
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
         case .cursorline, .cul:
             NumbersOverlay.shared.passAppState(state: appState)
             NumbersOverlay.shared.toggleOption(.cursorline)
-            appState.mode = .normal(currentPendingOperation: .none)
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
         case .cursorcolumn, .cuc:
             NumbersOverlay.shared.passAppState(state: appState)
             NumbersOverlay.shared.toggleOption(.cursorcolumn)
-            appState.mode = .normal(currentPendingOperation: .none)
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
         case .quit, .q:
             NSApp.terminate(nil)
