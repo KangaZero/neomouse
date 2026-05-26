@@ -82,4 +82,11 @@ public struct NeomouseType {
         case command
         case menu
     }
+
+    public enum Direction: String, Decodable, Sendable {
+        case left
+        case down
+        case up
+        case right
+    }
 }

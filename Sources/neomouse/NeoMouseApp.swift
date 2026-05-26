@@ -790,6 +790,44 @@ struct NeoMouse: App {
                         ToastManager.shared.show(
                             "Find Mode")
                         return
+                    case "H", "J", "K", "L":
+                        // Switch-expression (Swift 5.9+) needs the explicit
+                        // `NeomouseType.Direction?` annotation so the `nil`
+                        // default unifies with the `.left/.down/.up/.right`
+                        // cases under the optional type. Don't wrap this in a
+                        // closure — that flips the parser into statement-mode
+                        // and the cases become Void, which is what made `nil`
+                        // unassignable in the earlier version.
+                        let pendingDirection: NeomouseType.Direction? =
+                            switch event.characters {
+                            case "H": .left
+                            case "J": .down
+                            case "K": .up
+                            case "L": .right
+                            default: nil
+                            }
+                        guard
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                .shift, .capsLock,
+                            ]),
+                            let direction = pendingDirection
+                        else {
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none,
+                                operationCountAsString: nil
+                            )
+                        }
+                        Gesture.scroll(
+                            direction: direction,
+                            at: currentCGPoint,
+                            stepValue: Int32(operationCount) * 30,  //TODO move to config
+                            incrementsPerGesture: 1
+                        )
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        return
                     // INFO: Here starts VIM-like motions on the cursor
                     //TODO check that if the operation except the lastIndex are only nums
                     case "h", "j", "k", "l":
@@ -1335,6 +1373,7 @@ struct NeoMouse: App {
                             CommandLine.shared.hide()
                         } else {
                             debug("execute command: \(currentCommand)")
+
                             CommandLine.shared.executeCommand(at: currentCommand)
                             CommandLine.shared.hide()
                             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)

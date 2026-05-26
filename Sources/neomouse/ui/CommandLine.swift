@@ -121,7 +121,7 @@ final class CommandLine {
         window?.orderOut(nil)
     }
 
-    func commandExecutionHandler(command: Config.Command) {
+    func commandExecutionHandler(command: Config.Command, args: String? = nil) {
         guard let appState else {
             return debug("commandExecutionHandler called but appState is nil")
         }
@@ -151,6 +151,11 @@ final class CommandLine {
             NumbersOverlay.shared.toggleOption(.cursorcolumn)
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
+        // INFO: Actual logic execution in executeCommand fn
+        case .cursor, .c:
+            ToastManager.shared.show("e.g. c[ursor](Int,Int)")
+            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+            return
         case .marks, .m:
             appState.mode = .menu
             MarksMenu.shared.passAppState(state: appState)
@@ -165,6 +170,64 @@ final class CommandLine {
     func executeCommand(at command: String) {
         guard let appState, case .command = appState.mode else {
             return debug("executeSuggestionCommand called but appState.mode is not .command")
+        }
+        // If the command is exactly "cursor" or "c" (case-insensitive), show the usage toast.
+        // This is to handle the case where the user types ":cursor" or ":c" without coordinates, as the regex-based parsing below only matches when coordinates are present.
+        if command.wholeMatch(of: /(?i)cursor|c/) != nil {
+            commandExecutionHandler(command: .cursor)
+            return
+        }
+        // Check to see if the .c or .cursor command is being executed
+        /// ### Supported Syntaxes
+        /// 1. **Bracketed format:** `cursor(X,Y)` or `c(X,Y)`
+        /// 2. **Space-separated format:** `cursor X Y` or `c X Y`
+        ///
+        /// ### Capture Groups
+        /// Because regex engines require unique names across alternative evaluation branches,
+        /// the extracted coordinates are split into two sets of named capture groups:
+        ///
+        /// - **command**: The command name, either "cursor" or "c", captured case-insensitively.
+        /// - **x**: The X-coordinate if the string uses the *bracketed* format.
+        /// - **y**: The Y-coordinate if the string uses the *bracketed* format.
+        /// - **x2**: The X-coordinate if the string uses the *space-separated* format.
+        /// - **y2**: The Y-coordinate if the string uses the *space-separated* format.
+        let fullCursorCommandRegex =
+            /(?i)\b(?<command>cursor|c)\b(?:\s*\(\s*(?<x>\d+)\s*,\s*(?<y>\d+)\s*\)|\s+(?<x2>\d+)\s+(?<y2>\d+))/
+        if let match = command.firstMatch(of: fullCursorCommandRegex) {
+            // Typed regex literals expose named captures via dot syntax
+            // (match.x, match.y, …). The string-subscript form match["x"] is
+            // only available when Output == AnyRegexOutput — i.e., regexes
+            // built at runtime via `Regex("...")`. We have a literal here, so
+            // the typed accessor is what's available.
+            let xString = match.x ?? match.x2
+            let yString = match.y ?? match.y2
+            if let x = xString.flatMap({ Int($0) }), let y = yString.flatMap({ Int($0) }) {
+                debug("Parsed cursor command with coordinates: (\(x), \(y))")
+                guard let currentScreenSize = Screen.currentSize() else {
+                    return debug("Current screen size is unavailable in appState when executing cursor command")
+                }
+                let usable = CGRect(
+                    x: appState.gridInset,
+                    y: appState.gridInset,
+                    width: max(0, currentScreenSize.width - 2 * appState.gridInset),
+                    height: max(0, currentScreenSize.height - 2 * appState.gridInset)
+                )
+                let target = MotionTarget.toLineAndColumnCount(
+                    screenWidth: currentScreenSize.width,
+                    screenHeight: currentScreenSize.height,
+                    gridInset: appState.gridInset,
+                    columnsOnScreen: appState.resolvedGrid(usable: usable).cols,
+                    rowsOnScreen: appState.resolvedGrid(usable: usable).rows,
+                    columnCount: CGFloat(x),
+                    lineCount: CGFloat(y)
+                )
+                Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                CommandLine.shared.hide()
+                appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                return
+            } else {
+                debug("Failed to parse coordinates from command: \(command)")
+            }
         }
         //IMPORTANT: case insensitive just like vim
         guard let commandToExecute = Config.Command(rawValue: command.localizedLowercase) else {
@@ -222,8 +285,10 @@ final class CommandLine {
 
         // Bottom-left of the display under the cursor. visibleFrame already
         // excludes the menu bar + Dock.
-        let x = currentScreen.visibleFrame.minX + 20
-        let y = currentScreen.visibleFrame.maxY - 80
+        // TODO make this configurable? Maybe some users want it top-left, or centered etc
+        // Make default to top-center, like it is right now
+        let x = ((currentScreen.visibleFrame.minX + currentScreen.visibleFrame.maxX) / 2) - (panel.frame.width / 2)
+        let y = currentScreen.visibleFrame.maxY - 100
         panel.setFrameOrigin(CGPoint(x: x, y: y))
 
         panel.orderFront(nil)

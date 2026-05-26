@@ -63,6 +63,34 @@ public enum MotionTarget {
             y: (screenHeight - gridInset) / CGFloat(rowsOnScreen) * count
         )
     }
+
+    public static func toColumnCount(
+        localY: CGFloat,
+        screenWidth: CGFloat,
+        gridInset: CGFloat,
+        columnsOnScreen: Int,
+        count: CGFloat
+    ) -> CGPoint {
+        CGPoint(
+            x: (screenWidth - gridInset) / CGFloat(columnsOnScreen) * count,
+            y: localY
+        )
+    }
+
+    public static func toLineAndColumnCount(
+        screenWidth: CGFloat,
+        screenHeight: CGFloat,
+        gridInset: CGFloat,
+        columnsOnScreen: Int,
+        rowsOnScreen: Int,
+        columnCount: CGFloat,
+        lineCount: CGFloat
+    ) -> CGPoint {
+        CGPoint(
+            x: (screenWidth - gridInset) / CGFloat(columnsOnScreen) * columnCount,
+            y: (screenHeight - gridInset) / CGFloat(rowsOnScreen) * lineCount
+        )
+    }
 }
 
 // MARK: - Pending-operation state machine (spec, not yet wired)

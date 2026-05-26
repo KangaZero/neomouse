@@ -96,7 +96,8 @@ public struct Config: Decodable, Sendable {
         /// Single source of truth for the fallback list when settings.toml is
         /// missing or has no `[commands]` section. Update here; nowhere else.
         public static let defaultAvailable: [Command] = [
-            .numbers, .nu, .relativenumbers, .rnu, .cursorline, .cul, .cursorcolumn, .cuc, .help, .h, .delmarks, .delm,
+            .numbers, .nu, .relativenumbers, .rnu, .cursorline, .cul, .cursorcolumn, .cuc, .cursor, .c, .help, .h,
+            .delmarks, .delm,
             .registers, .reg, .jumps, .ju, .m, .marks, .q, .quit,
         ]
     }
@@ -106,6 +107,7 @@ public struct Config: Decodable, Sendable {
         case relativenumbers, rnu
         case cursorline, cul
         case cursorcolumn, cuc
+        case cursor, c
         case registers, reg
         case jumps, ju
         case help, h

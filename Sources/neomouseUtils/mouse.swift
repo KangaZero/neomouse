@@ -32,7 +32,27 @@ public enum Mouse {
     /// observers of the event stream (overlay listeners, accessibility tools,
     /// target apps) see the move.
     public static func moveToGlobal(x: CGFloat, y: CGFloat, isMoveToScreenLocal: Bool = false) {
-        let point = CGPoint(x: x, y: y)
+        // Clamp to the union of all active displays so a caller passing a
+        // stale/out-of-bounds point (e.g. a mark recorded on a now-disconnected
+        // monitor) doesn't strand the cursor in dead space.
+        let bounds = Screen.allBoundingRect()
+        let clampedX: CGFloat
+        let clampedY: CGFloat
+        if bounds.isNull {
+            // No active displays (CGRect.null.minX == .infinity — clamping
+            // would yield NaN). Degrade to a pass-through.
+            clampedX = x
+            clampedY = y
+        } else {
+            clampedX = max(bounds.minX, min(x, bounds.maxX))
+            clampedY = max(bounds.minY, min(y, bounds.maxY))
+            if clampedX != x || clampedY != y {
+                debug(
+                    "Mouse.moveToGlobal clamped (\(x), \(y)) → (\(clampedX), \(clampedY)) to fit allBoundingRect \(bounds)"
+                )
+            }
+        }
+        let point = CGPoint(x: clampedX, y: clampedY)
         let src = eventSource()
         let leftDown = CGEventSource.buttonState(.hidSystemState, button: .left)
         let rightDown = CGEventSource.buttonState(.hidSystemState, button: .right)
@@ -44,7 +64,7 @@ public enum Mouse {
                 : .mouseMoved
         let button: CGMouseButton = leftDown ? .left : rightDown ? .right : .left
         if !isMoveToScreenLocal {
-            debug("Mouse.moveToGlobal x:\(x), y:\(y), type:\(type), button:\(button)")
+            debug("Mouse.moveToGlobal x:\(clampedX), y:\(clampedY), type:\(type), button:\(button)")
         }
         CGEvent(
             mouseEventSource: src, mouseType: type,

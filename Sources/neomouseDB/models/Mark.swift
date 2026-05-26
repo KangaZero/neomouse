@@ -89,7 +89,7 @@ public struct Mark: Codable, Identifiable, FetchableRecord, MutablePersistableRe
                 return debug("Mark - set: Invalid mark \(mark). Marks must be a single letter or number.")
             }
             let allMarks = self.getAll(sessionId: sessionId)
-            var markThatIsSame = allMarks?.first(where: { existing in
+            let markThatIsSame = allMarks?.first(where: { existing in
                 existing.isVisual == isVisual
                     && existing.startCGXPoint == startCGXPoint
                     && existing.startCGYPoint == startCGYPoint
@@ -104,14 +104,19 @@ public struct Mark: Codable, Identifiable, FetchableRecord, MutablePersistableRe
                     )
                     markThatIsSame.mark = mark
                     try markThatIsSame.update(db)
-                    return
-                }
-                if var existing =
+                } else if var existing =
                     try Mark
                     .filter(Mark.Columns.sessionId == sessionId)
                     .filter(Mark.Columns.mark == mark)
                     .fetchOne(db)
                 {
+                    if existing.isVisual == isVisual, existing.startCGXPoint == startCGXPoint,
+                        existing.startCGYPoint == startCGYPoint, existing.endCGXPoint == endCGXPoint,
+                        existing.endCGYPoint == endCGYPoint
+                    {
+                        debug("Mark - get: Existing mark with same name and CG points found, skipping update")
+                        return
+                    }
                     debug("Mark - get: Overwritting existing mark in")
                     existing.startCGXPoint = startCGXPoint
                     existing.startCGYPoint = startCGYPoint

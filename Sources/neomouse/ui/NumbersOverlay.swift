@@ -75,9 +75,9 @@ final class NumbersOverlay {
     private var anchoredScreen: NSScreen?
 
     /// Width of the row gutter, in points.
-    static let gutterWidth: CGFloat = 56
+    static let gutterWidth: CGFloat = 20
     /// Height of the top column strip, in points.
-    static let columnStripHeight: CGFloat = 24
+    static let columnStripHeight: CGFloat = 20
 
     func passAppState(state: NeoMouseState) {
         appState = state
