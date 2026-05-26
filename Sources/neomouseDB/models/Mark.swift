@@ -88,7 +88,24 @@ public struct Mark: Codable, Identifiable, FetchableRecord, MutablePersistableRe
             else {
                 return debug("Mark - set: Invalid mark \(mark). Marks must be a single letter or number.")
             }
+            let allMarks = self.getAll(sessionId: sessionId)
+            var markThatIsSame = allMarks?.first(where: { existing in
+                existing.isVisual == isVisual
+                    && existing.startCGXPoint == startCGXPoint
+                    && existing.startCGYPoint == startCGYPoint
+                    && existing.endCGXPoint == endCGXPoint
+                    && existing.endCGYPoint == endCGYPoint
+            })
+
             try dbQueue.write { db in
+                if var markThatIsSame {
+                    debug(
+                        "Mark - set: Mark with same name and CG points already exists, updating mark \(markThatIsSame.mark) to \(mark)"
+                    )
+                    markThatIsSame.mark = mark
+                    try markThatIsSame.update(db)
+                    return
+                }
                 if var existing =
                     try Mark
                     .filter(Mark.Columns.sessionId == sessionId)

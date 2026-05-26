@@ -31,13 +31,6 @@ public func initializeDB(forceReIntialize: Bool = false) {
                 try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
                 debug("Dropped table \(table) if it existed")
             }
-            // try db.execute(sql: "DROP TABLE IF EXISTS executed_operation")
-            // debug("Dropped table 'operation' if it existed.")
-            // try db.execute(sql: "DROP TABLE IF EXISTS mark")
-            // debug("Dropped table 'mark' if it existed.")
-            // try db.execute(sql: "DROP TABLE IF EXISTS session")
-            // debug("Dropped table 'session' if it existed.")
-            //
             try db.create(table: "session") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("name", .text).notNull()
@@ -53,8 +46,8 @@ public func initializeDB(forceReIntialize: Bool = false) {
                 t.autoIncrementedPrimaryKey("id")
                 t.column("mark", .text).notNull()
                 t.column("isVisual", .boolean).notNull()
-                t.column("startCGXPoint", .double).notNull()
-                t.column("startCGYPoint", .double).notNull()
+                t.column("startCGXPoint", .double)
+                t.column("startCGYPoint", .double)
                 t.column("endCGXPoint", .double).notNull()
                 t.column("endCGYPoint", .double).notNull()
                 t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")

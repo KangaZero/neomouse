@@ -77,7 +77,7 @@ private struct KeyCastView: View {
     private var pending: String? {
         switch state.mode {
         case .normal(let op, _, ): return "\(op)"
-        case .find(let op, _): return op
+        case .find(let op, _, _): return op
         case .command(let op, _): return op
         case .disabled: return nil
         case .menu: return nil

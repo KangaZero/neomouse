@@ -84,7 +84,7 @@ struct GridOverlayView: View {
                     let cellHeight = (endY - startY) / CGFloat(state.gridDivisions)
                     let innerCellWidth = cellWidth / CGFloat(state.innerGridDivisions)
                     let innerCellHeight = cellHeight / CGFloat(state.innerGridDivisions)
-                    guard case .find(_, let findState) = state.mode else {
+                    guard case .find(_, let findState, _) = state.mode else {
                         return
                     }
                     if let outerIndex = findState.pendingGridDivisionIndex {
@@ -105,26 +105,28 @@ struct GridOverlayView: View {
                         }
                         ctx.stroke(focusedPath, with: .color(.white.opacity(0.6)), lineWidth: 1)
 
-                        for innerCol in 0..<state.innerGridDivisions {
-                            for innerRow in 0..<state.innerGridDivisions {
-                                let innerIndex = innerRow * state.innerGridDivisions + innerCol
-                                let innerMiddleX =
-                                    cellOriginX + innerCellWidth * CGFloat(innerCol)
-                                    + innerCellWidth / 2
-                                let innerMiddleY =
-                                    cellOriginY + innerCellHeight * CGFloat(innerRow)
-                                    + innerCellHeight / 2
-                                let label = Text(
-                                    "\(state.findModeInnerGridDivisionCharacters[innerIndex])"
-                                )
-                                .accessibilityLabel(
-                                    "Inner Row \(innerRow) Inner Col \(innerCol) \(state.findModeInnerGridDivisionCharacters[innerIndex])"
-                                )
-                                .font(.system(size: 12))
-                                .foregroundColor(.white)
-                                ctx.draw(
-                                    label, at: CGPoint(x: innerMiddleX, y: innerMiddleY),
-                                    anchor: .center)
+                        if case .find(_, _, let isQuickFind) = state.mode, !isQuickFind {
+                            for innerCol in 0..<state.innerGridDivisions {
+                                for innerRow in 0..<state.innerGridDivisions {
+                                    let innerIndex = innerRow * state.innerGridDivisions + innerCol
+                                    let innerMiddleX =
+                                        cellOriginX + innerCellWidth * CGFloat(innerCol)
+                                        + innerCellWidth / 2
+                                    let innerMiddleY =
+                                        cellOriginY + innerCellHeight * CGFloat(innerRow)
+                                        + innerCellHeight / 2
+                                    let label = Text(
+                                        "\(state.findModeInnerGridDivisionCharacters[innerIndex])"
+                                    )
+                                    .accessibilityLabel(
+                                        "Inner Row \(innerRow) Inner Col \(innerCol) \(state.findModeInnerGridDivisionCharacters[innerIndex])"
+                                    )
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    ctx.draw(
+                                        label, at: CGPoint(x: innerMiddleX, y: innerMiddleY),
+                                        anchor: .center)
+                                }
                             }
                         }
                     } else {
@@ -171,7 +173,9 @@ struct GridOverlayView: View {
                                     charLabel,
                                     at: CGPoint(x: x + cellWidth / 2, y: y + cellHeight / 2),
                                     anchor: .center)
-                                if state.isAlwaysShowInnerGridCharacters {
+                                if state.isAlwaysShowInnerGridCharacters,
+                                    case .find(_, _, let isQuickFind) = state.mode, !isQuickFind
+                                {
                                     for innerCol in 0..<state.innerGridDivisions {
                                         for innerRow in 0..<state.innerGridDivisions {
                                             let innerX = x + innerCellWidth * CGFloat(innerCol)

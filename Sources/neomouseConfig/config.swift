@@ -34,8 +34,8 @@ public struct Config: Decodable, Sendable {
         public static let defaultInset: CGFloat = 10
         public static let defaultDivisions: Int = 5
         public static let defaultInnerDivisions: Int = 3
-        public static let defaultFindModeCharacters = "abcdefghijklmnopqrstuvwxyz"
-        public static let defaultFindModeInnerCharacters = "abcdefghijklmnopqrstuvwxyz"
+        public static let defaultFindModeCharacters = "abcdefghijklmnopqrstuvwxyz1234567890"
+        public static let defaultFindModeInnerCharacters = "abcdefghijklmnopqrstuvwxyz1234567890"
         public static let defaultIsAlwaysShowInnerCharacters = true
     }
 
@@ -97,7 +97,7 @@ public struct Config: Decodable, Sendable {
         /// missing or has no `[commands]` section. Update here; nowhere else.
         public static let defaultAvailable: [Command] = [
             .numbers, .nu, .relativenumbers, .rnu, .cursorline, .cul, .cursorcolumn, .cuc, .help, .h, .delmarks, .delm,
-            .registers, .reg, .jumps, .ju, .q, .quit,
+            .registers, .reg, .jumps, .ju, .m, .marks, .q, .quit,
         ]
     }
 
@@ -110,6 +110,7 @@ public struct Config: Decodable, Sendable {
         case jumps, ju
         case help, h
         case delmarks, delm
+        case marks, m
         case q, quit
     }
 

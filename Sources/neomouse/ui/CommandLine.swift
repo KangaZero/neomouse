@@ -151,6 +151,11 @@ final class CommandLine {
             NumbersOverlay.shared.toggleOption(.cursorcolumn)
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
+        case .marks, .m:
+            appState.mode = .menu
+            MarksMenu.shared.passAppState(state: appState)
+            MarksMenu.shared.toggle()
+            return
         case .quit, .q:
             NSApp.terminate(nil)
         default: return
@@ -184,7 +189,6 @@ final class CommandLine {
     }
 
     private func show() {
-
         guard
             let currentScreen =
                 (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }),

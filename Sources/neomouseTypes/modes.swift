@@ -62,6 +62,7 @@ public struct NeomouseType {
         case find(
             currentPendingOperation: String?,
             findState: FindState,
+            isQuickFind: Bool
         )
         // case visualFind
         case command(
