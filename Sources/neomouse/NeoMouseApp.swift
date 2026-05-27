@@ -269,6 +269,7 @@ struct NeoMouse: App {
                     [keyDown]
                       key = \(_key)(keyCode=\(event.keyCode))
                       characters = \(String(describing: event.characters))
+                      charactersIgnoringModifiers = \(String(describing: event.charactersIgnoringModifiers))
                       modifiers = \(event.modifierFlags.rawValue)
                       mode = \(appState.mode)
                       cgPoint = (\(Int(currentCGPoint.x)), \(Int(currentCGPoint.y)))
@@ -334,6 +335,7 @@ struct NeoMouse: App {
                     }
                     switch currentPendingNormalOperation {
                     case .g:
+                        //TODO consider switching to charactersIgnoringModifiers
                         switch event.characters {
                         case "g":
                             guard event.modifierFlags.rawValue == 256 else {
@@ -413,6 +415,7 @@ struct NeoMouse: App {
                         }
                         break
                     case .gg:
+                        //TODO consider switching to charactersIgnoringModifiers
                         switch (event.characters, appState.isVisual) {
                         case ("y", false):
                             guard event.modifierFlags.rawValue == 256 else {
@@ -539,6 +542,69 @@ struct NeoMouse: App {
                             "ggvG visual state: start(\(appState.startCGXPoint!), \(appState.startCGYPoint!)) end(\(appState.endCGXPoint!), \(appState.endCGYPoint!))"
                         )
                         return
+                    case .ctrlW:
+                        switch event.charactersIgnoringModifiers {
+                        case "w":
+                            guard
+                                event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .control, .shift, .capsLock,
+                                ]), let adjacentScreenRect = Screen.adjacentRect()
+                            else {
+                                debug("No adjacent screen found for Ctrl-w w")
+                                return appState.mode = .normal(
+                                    currentPendingOperation: .none,
+                                    operationCountAsString: nil
+                                )
+                            }
+                            Mouse.moveToGlobal(
+                                x: adjacentScreenRect.midX,
+                                y: adjacentScreenRect.midY)
+                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                        case "h", "j", "k", "l":
+                            guard
+                                // With shift or capslock, would swap over the 2 buffers in vim,
+                                // TODO: find a way to swap screens with the shift/capslock variant??
+                                event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .control, .shift, .capsLock,
+                                ])
+                            else {
+                                debug(
+                                    "Ctrl-w + \(event.charactersIgnoringModifiers ?? "?") contains an unexpected modifier"
+                                )
+                                return appState.mode = .normal(
+                                    currentPendingOperation: .none,
+                                    operationCountAsString: nil
+                                )
+                            }
+                            let direction: NeomouseType.Direction
+                            switch event.charactersIgnoringModifiers {
+                            case "h": direction = .left
+                            case "j": direction = .down
+                            case "k": direction = .up
+                            case "l": direction = .right
+                            default:
+                                debug("Unexpected character for Ctrl-w-\(event.charactersIgnoringModifiers ?? "?")")
+                                return appState.mode = .normal(
+                                    currentPendingOperation: .none,
+                                    operationCountAsString: nil
+                                )
+                            }
+                            guard let nextScreenRect = Screen.adjacentDisplayRectByDirection(at: direction) else {
+                                debug(
+                                    "No adjacent screen found in direction \(direction) for Ctrl-w-\(event.charactersIgnoringModifiers ?? "?")"
+                                )
+                                return appState.mode = .normal(
+                                    currentPendingOperation: .none,
+                                    operationCountAsString: nil
+                                )
+                            }
+                            Mouse.moveToGlobal(
+                                x: nextScreenRect.midX,
+                                y: nextScreenRect.midY)
+                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                        default: break
+                        }
+                        break
                     case .setMark:
                         guard
                             event.modifierFlags.rawValue == 256
@@ -646,6 +712,7 @@ struct NeoMouse: App {
                             debug("registerAction register contains a non-shift modifier or no activeRegister")
                             return
                         }
+                        //TODO consider switching to charactersIgnoringModifiers
                         switch event.characters {
                         case "y", "Y":
                             if appState.isVisual {
@@ -716,30 +783,8 @@ struct NeoMouse: App {
                         //INFO: Return early here to avoid the mark char being processed by the normal flow below, which could cause unintended behavior (eg.. "mm" would trigger both the mark setting and the "go to start of line" behavior)
                         return
                     }
+                    //TODO consider switching to charactersIgnoringModifiers
                     switch event.characters {
-                    // case "e":
-                    //     appState.operationCountAsString = nil
-                    //     guard
-                    //         event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                    //             == .command
-                    //     else {
-                    //         return appState.mode = .normal(
-                    //             currentPendingOperation: .none
-                    //         )
-                    //     }
-                    //     //TODO make this into a reusable fn disableNeoMouse
-                    //     if appState.isVisual {
-                    //         CoreOperations.exitVisualState(
-                    //             appState: appState,
-                    //             visualHighlightOverlay:
-                    //                 VisualHighlightOverlay.shared)
-                    //     }
-                    //     appState.mode = .disabled
-                    //     HelpDialog.shared.hide()
-                    //     CommandLine.shared.hide()
-                    //     ToastManager.shared.show(
-                    //         "Neomouse Deactivated")
-                    //     return
                     //TODO: Add "$", "^ : where it will go to the most left/right of the current
                     //focused window", "g$" for most right, hjkl, counters,
                     case "F":
@@ -800,10 +845,10 @@ struct NeoMouse: App {
                         // unassignable in the earlier version.
                         let pendingDirection: NeomouseType.Direction? =
                             switch event.characters {
-                            case "H": .left
+                            case "H": .right  // swapped to match the intuitive direction of the scroll
                             case "J": .down
                             case "K": .up
-                            case "L": .right
+                            case "L": .left  // swapped to match the intuitive direction of the scroll
                             default: nil
                             }
                         guard
@@ -827,7 +872,7 @@ struct NeoMouse: App {
                             currentPendingOperation: .none,
                             operationCountAsString: nil
                         )
-                        return
+                        break
                     // INFO: Here starts VIM-like motions on the cursor
                     //TODO check that if the operation except the lastIndex are only nums
                     case "h", "j", "k", "l":
@@ -934,7 +979,29 @@ struct NeoMouse: App {
                         CommandLine.shared.passAppState(state: appState)
                         CommandLine.shared.toggle()
                         break
-
+                    case "d", "D", "\u{04}":
+                        guard
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
+                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .control, .shift, .capsLock,
+                                ])
+                        else {
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none,
+                                operationCountAsString: nil
+                            )
+                        }
+                        Gesture.scroll(
+                            direction: NeomouseType.Direction.down,
+                            at: currentCGPoint,
+                            stepValue: Int32(operationCount) * 30,  //TODO move to config
+                            incrementsPerGesture: 10
+                        )
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        return
                     case "s":
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
@@ -1039,26 +1106,32 @@ struct NeoMouse: App {
                         // }
                         break
                     case "w", "W", "\u{17}":
-                        if currentPendingNormalOperation == .ctrlW {
-                            guard let adjacentScreenRect = Screen.adjacentRect() else {
-                                debug("No adjacent screen found for Ctrl-w w")
-                                appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                                break
-                            }
-                            debug("\(adjacentScreenRect), adj")
-                            Mouse.moveToGlobal(
-                                x: adjacentScreenRect.midX,
-                                y: adjacentScreenRect.midY)
-                            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
-                            && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .control, .shift, .capsLock,
-                            ])
-                        {
-                            appState.mode = .normal(currentPendingOperation: .ctrlW, operationCountAsString: nil)
-                        } else {
-                            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                        // if currentPendingNormalOperation == .ctrlW {
+                        //     guard let adjacentScreenRect = Screen.adjacentRect() else {
+                        //         debug("No adjacent screen found for Ctrl-w w")
+                        //         appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                        //         break
+                        //     }
+                        //     debug("\(adjacentScreenRect), adj")
+                        //     Mouse.moveToGlobal(
+                        //         x: adjacentScreenRect.midX,
+                        //         y: adjacentScreenRect.midY)
+                        //     appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                        // } else if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
+                        guard
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
+                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                    .control, .shift, .capsLock,
+                                ])
+                        else {
+                            debug(
+                                "Ctrl modifier not found for w/W, or contains extra modifiers: \(event.modifierFlags)")
+                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                         }
+                        appState.mode = .normal(currentPendingOperation: .ctrlW, operationCountAsString: nil)
+                        // } else {
+                        //     appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                        // }
                         break
                     case "V":
                         appState.isVisual.toggle()
@@ -1322,6 +1395,7 @@ struct NeoMouse: App {
                         break
                     default: break
                     }
+                    //TODO consider switching to charactersIgnoringModifiers
                     switch event.characters {
                     case "e":
                         guard

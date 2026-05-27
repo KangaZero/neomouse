@@ -17,6 +17,7 @@ extension NeoMouse {
     /// Requires *both* Accessibility AND Input Monitoring permissions in
     /// System Settings → Privacy. Without those, `tapCreate` returns nil.
     @MainActor
+    /// TODO consider logic and add for non-English based keyboard layouts.
     static func installKeyEventTap() {
         let state = NeoMouse.sharedState
         let keyMask: CGEventMask = 1 << CGEventType.keyDown.rawValue
@@ -73,8 +74,10 @@ extension NeoMouse {
                             let mods = nsEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
                             //IMPORTANT: Disable control when in command or menu mode as they are used
                             //TODO think about what to do with Ctrl w in normal mode
+                            // Commmented out as CTRL will be used in normal mode as well, maybe remap to a super key like nvim??
+                            //|| (!isCommandOrMenuMode && mods.contains(.control))
                             let hasSystemMod =
-                                mods.contains(.command) || (!isCommandOrMenuMode && mods.contains(.control))
+                                mods.contains(.command)
                                 || mods.contains(.option)
                             let keyCode = nsEvent.keyCode
                             let isSpecialKey: Bool = {
@@ -105,6 +108,7 @@ extension NeoMouse {
                                 }
                             }()
                             // keycodes above 128 are non-standard so they are allowed to pass through
+                            // INFO: The Fn keycode is 179 so no need to check for it to enable it
                             if hasSystemMod || isSpecialKey || isFKey || keyCode >= 128 {
                                 // Notify neomouse AND let the OS see the key. Side-effect:
                                 // app may also react (e.g. Esc closes its picker). Accepted
