@@ -1060,54 +1060,13 @@ struct NeoMouse: App {
                             stepY: _hjklStepY,
                             count: operationCount)
                         Mouse.moveRelative(
-                            x: delta.dx, y: delta.dy,
-                            clampToScreen:
-                                appState.isClampCursorToCurrentScreen)
+                            x: delta.dx, y: delta.dy, clampToScreen: true
+                        )
                         appState.mode = .normal(
                             currentPendingOperation: .none,
                             operationCountAsString: nil
                         )
                         break
-                    case "q":
-                        if var mouseLoc = CGEvent(source: nil)?.location {
-                            mouseLoc.x -= 10
-                            CGWarpMouseCursorPosition(mouseLoc)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
-                    case "w":
-                        if var mouseLoc = CGEvent(source: nil)?.location {
-                            mouseLoc.y += 10  // CG y is top-down → +y is visually down
-                            CGWarpMouseCursorPosition(mouseLoc)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
-                    case "e":
-                        if var mouseLoc = CGEvent(source: nil)?.location {
-                            mouseLoc.y -= 10
-                            CGWarpMouseCursorPosition(mouseLoc)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
-                    case "r":
-                        if var mouseLoc = CGEvent(source: nil)?.location {
-                            mouseLoc.x += 10
-                            CGWarpMouseCursorPosition(mouseLoc)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
                     case "'":  //goToMark
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
@@ -1974,7 +1933,8 @@ struct NeoMouse: App {
             let targetY =
                 appState.gridInset + CGFloat(row) * cellHeight + CGFloat(innerRow)
                 * innerCellHeight + innerCellHeight / 2
-            Mouse.moveToScreenLocal(x: targetX, y: targetY)
+            Mouse.moveToGlobal(x: targetX, y: targetY)
+            // Mouse.moveToScreenLocal(x: targetX, y: targetY)
             enterNormalMode(appState: appState)
         }
     }

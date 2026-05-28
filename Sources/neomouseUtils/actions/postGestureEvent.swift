@@ -36,5 +36,5 @@ func postGestureEvent(
         event.setDoubleValueField(CGEventField(rawValue: 119)!, value: dy)
     }
 
-    event.post(tap: .cghidEventTap)
+    event.post(tap: .cgSessionEventTap)
 }

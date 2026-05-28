@@ -50,7 +50,12 @@ public enum System {
         }
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        // Session tap (not HID) so HID-level keyboard accessibility services
+        // (Sticky Keys, Slow Keys, key-repeat delay) can't mutate the
+        // synthesized chord. Our own CGEventTap is also at the session level
+        // with .headInsertEventTap, so it still sees these events and the
+        // sentinel-userData check passes them through.
+        keyDown.post(tap: .cgSessionEventTap)
+        keyUp.post(tap: .cgSessionEventTap)
     }
 }

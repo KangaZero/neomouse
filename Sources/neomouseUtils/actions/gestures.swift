@@ -59,7 +59,7 @@ public enum Gesture {
             event?.type = CGEventType(rawValue: 29)!  // kCGEventGesture
             event?.setIntegerValueField(CGEventField(rawValue: 9)!, value: 2)
             event?.location = point
-            event?.post(tap: .cghidEventTap)
+            event?.post(tap: .cgSessionEventTap)
         }
 
         // First tap (began + ended)
