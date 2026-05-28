@@ -88,37 +88,50 @@ extension NeoMouse {
             else {
                 return
             }
+            // Capture BEFORE we trigger ⌘C so the polling helper has a stable
+            // reference point. Reading changeCount after simulate(.copy) would
+            // race against the synthesized event itself.
+            let initialChangeCount = NSPasteboard.general.changeCount
             System.simulate(.copy)
-
-            DispatchQueue.main.async {
-                if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
-                    debug("Copied item to clipboard: \(Pasteboard.preview(pasteboardItem))")
-                    Register.set(
-                        register: activeRegister, item: pasteboardItem, sessionId: currentSession.id!)
+            Pasteboard.waitForChange(after: initialChangeCount) { pasteboardItem in
+                guard let pasteboardItem else {
+                    return debug(
+                        "registerYank - timed out waiting for ⌘C to land on register '\(activeRegister)'")
                 }
+                debug("Copied item to clipboard: \(Pasteboard.preview(pasteboardItem))")
+                Register.set(
+                    register: activeRegister, item: pasteboardItem, sessionId: currentSession.id!)
+                RegisterMenu.shared.refresh()
             }
-
         }
 
         @MainActor
         static func registerCurrentPasteboardItem(
             currentSession: Session, activeRegister: String
         ) {
-            DispatchQueue.main.async {
-                if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
-                    Register.set(
-                        register: activeRegister,
-                        item: pasteboardItem,
-                        sessionId: currentSession.id!
-                    )
-                    debug(
-                        "registerCurrentPasteboardItem - Copied pasteboard item to register '\(activeRegister)': \(Pasteboard.preview(pasteboardItem))"
-                    )
-                } else {
-                    debug(
-                        "registerCurrentPasteboardItem - No pasteboard item found to copy to register '\(activeRegister)'"
+            // Capture immediately on entry. Typical caller pattern is
+            // normalYank() then registerCurrentPasteboardItem() — at this
+            // point normalYank's screenshot Task hasn't yet written to the
+            // pasteboard, so the captured count is genuinely "pre-write."
+            // waitForChange then blocks until the Task lands its writeObjects,
+            // which avoids the race where a fixed 100ms delay would fire
+            // before the screenshot pipeline finished.
+            let initialChangeCount = NSPasteboard.general.changeCount
+            Pasteboard.waitForChange(after: initialChangeCount) { pasteboardItem in
+                guard let pasteboardItem else {
+                    return debug(
+                        "registerCurrentPasteboardItem - timed out waiting for pasteboard change for register '\(activeRegister)'"
                     )
                 }
+                Register.set(
+                    register: activeRegister,
+                    item: pasteboardItem,
+                    sessionId: currentSession.id!
+                )
+                RegisterMenu.shared.refresh()
+                debug(
+                    "registerCurrentPasteboardItem - Copied pasteboard item to register '\(activeRegister)': \(Pasteboard.preview(pasteboardItem))"
+                )
             }
         }
 
@@ -143,21 +156,22 @@ extension NeoMouse {
         static func registerCurrentPasteboardItemToSystemRegister(
             currentSession: Session, systemRegister: String = "+"
         ) {
-            DispatchQueue.main.async {
-                if let pasteboardItem = NSPasteboard.general.pasteboardItems?.first {
-                    Register.set(
-                        register: systemRegister,
-                        item: pasteboardItem,
-                        sessionId: currentSession.id!
-                    )
-                    debug(
-                        "registerCurrentPasteboardItemToSystemRegister - Copied pasteboard item to register '\(systemRegister)': \(Pasteboard.preview(pasteboardItem))"
-                    )
-                } else {
-                    debug(
-                        "registerCurrentPasteboardItemToSystemRegister - No pasteboard item found to copy to register '\(systemRegister)'"
+            let initialChangeCount = NSPasteboard.general.changeCount
+            Pasteboard.waitForChange(after: initialChangeCount) { pasteboardItem in
+                guard let pasteboardItem else {
+                    return debug(
+                        "registerCurrentPasteboardItemToSystemRegister - timed out for register '\(systemRegister)'"
                     )
                 }
+                Register.set(
+                    register: systemRegister,
+                    item: pasteboardItem,
+                    sessionId: currentSession.id!
+                )
+                RegisterMenu.shared.refresh()
+                debug(
+                    "registerCurrentPasteboardItemToSystemRegister - Copied pasteboard item to register '\(systemRegister)': \(Pasteboard.preview(pasteboardItem))"
+                )
             }
         }
 

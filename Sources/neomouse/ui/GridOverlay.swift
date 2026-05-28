@@ -87,7 +87,10 @@ struct GridOverlayView: View {
                     guard case .find(_, let findState, _) = state.mode else {
                         return
                     }
-                    if let outerIndex = findState.pendingGridDivisionIndex {
+                    if let outerIndex = findState.pendingGridDivisionIndex,
+                        case .find(_, _, let isQuickFind) = state.mode, !isQuickFind
+                    {
+
                         // Narrow to selected outer cell after first keypress
                         let selectedCol = outerIndex % state.gridDivisions
                         let selectedRow = outerIndex / state.gridDivisions
@@ -105,45 +108,44 @@ struct GridOverlayView: View {
                         }
                         ctx.stroke(focusedPath, with: .color(.white.opacity(0.6)), lineWidth: 1)
 
-                        if case .find(_, _, let isQuickFind) = state.mode, !isQuickFind {
-                            for innerCol in 0..<state.innerGridDivisions {
-                                for innerRow in 0..<state.innerGridDivisions {
-                                    let innerIndex = innerRow * state.innerGridDivisions + innerCol
-                                    let innerMiddleX =
-                                        cellOriginX + innerCellWidth * CGFloat(innerCol)
-                                        + innerCellWidth / 2
-                                    let innerMiddleY =
-                                        cellOriginY + innerCellHeight * CGFloat(innerRow)
-                                        + innerCellHeight / 2
-                                    let label = Text(
-                                        "\(state.findModeInnerGridDivisionCharacters[innerIndex])"
-                                    )
-                                    .accessibilityLabel(
-                                        "Inner Row \(innerRow) Inner Col \(innerCol) \(state.findModeInnerGridDivisionCharacters[innerIndex])"
-                                    )
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white)
-                                    ctx.draw(
-                                        label, at: CGPoint(x: innerMiddleX, y: innerMiddleY),
-                                        anchor: .center)
-                                }
+                        for innerCol in 0..<state.innerGridDivisions {
+                            for innerRow in 0..<state.innerGridDivisions {
+                                let innerIndex = innerRow * state.innerGridDivisions + innerCol
+                                let innerMiddleX =
+                                    cellOriginX + innerCellWidth * CGFloat(innerCol)
+                                    + innerCellWidth / 2
+                                let innerMiddleY =
+                                    cellOriginY + innerCellHeight * CGFloat(innerRow)
+                                    + innerCellHeight / 2
+                                let label = Text(
+                                    "\(state.findModeInnerGridDivisionCharacters[innerIndex])"
+                                )
+                                .accessibilityLabel(
+                                    "Inner Row \(innerRow) Inner Col \(innerCol) \(state.findModeInnerGridDivisionCharacters[innerIndex])"
+                                )
+                                .font(.system(size: 12))
+                                .foregroundColor(.white)
+                                ctx.draw(
+                                    label, at: CGPoint(x: innerMiddleX, y: innerMiddleY),
+                                    anchor: .center)
                             }
                         }
                     } else {
-                        // Default: outer grid + faint inner grid
-                        let totalInner = state.gridDivisions * state.innerGridDivisions
-                        var innerPath = Path()
-                        for i in 1..<totalInner {
-                            guard i % state.innerGridDivisions != 0 else { continue }
-                            let x = startX + innerCellWidth * CGFloat(i)
-                            innerPath.move(to: CGPoint(x: x, y: startY))
-                            innerPath.addLine(to: CGPoint(x: x, y: endY))
-                            let y = startY + innerCellHeight * CGFloat(i)
-                            innerPath.move(to: CGPoint(x: startX, y: y))
-                            innerPath.addLine(to: CGPoint(x: endX, y: y))
+                        if case .find(_, _, let isQuickFind) = state.mode, !isQuickFind {
+                            // Default: outer grid + faint inner grid
+                            let totalInner = state.gridDivisions * state.innerGridDivisions
+                            var innerPath = Path()
+                            for i in 1..<totalInner {
+                                guard i % state.innerGridDivisions != 0 else { continue }
+                                let x = startX + innerCellWidth * CGFloat(i)
+                                innerPath.move(to: CGPoint(x: x, y: startY))
+                                innerPath.addLine(to: CGPoint(x: x, y: endY))
+                                let y = startY + innerCellHeight * CGFloat(i)
+                                innerPath.move(to: CGPoint(x: startX, y: y))
+                                innerPath.addLine(to: CGPoint(x: endX, y: y))
+                            }
+                            ctx.stroke(innerPath, with: .color(.white.opacity(0.3)), lineWidth: 0.5)
                         }
-                        ctx.stroke(innerPath, with: .color(.white.opacity(0.3)), lineWidth: 0.5)
-
                         var outerPath = Path()
                         for i in 0...state.gridDivisions {
                             let x = startX + cellWidth * CGFloat(i)

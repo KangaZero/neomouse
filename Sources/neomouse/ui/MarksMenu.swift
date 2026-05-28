@@ -19,6 +19,11 @@ final class MarksMenu: ObservableObject {
         window.map { CGWindowID($0.windowNumber) }
     }
 
+    /// Whether the panel is currently on-screen. Used by NeoMouseApp's
+    /// `case .menu:` dispatch to know which menu (this one vs RegisterMenu)
+    /// owns the current keystrokes.
+    var isVisible: Bool { window?.isVisible ?? false }
+
     func toggle() {
         if let window, window.isVisible {
             hide()
@@ -80,7 +85,7 @@ final class MarksMenu: ObservableObject {
             let currentScreen =
                 (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }),
             let appState,
-            case .menu = appState.mode
+            case .menu(window: .marks) = appState.mode
         else {
             return debug(
                 "Could not retrieve current screen in MarksMenu.show and/or appState is \(appState == nil ? "nil" : "not nil")"

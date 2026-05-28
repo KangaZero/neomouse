@@ -164,8 +164,39 @@ public enum Mouse {
             }
         }
     }
+    public static func appUnderRect() -> (app: NSRunningApplication, rect: CGRect)? {
+        guard let mouseLocation = CGEvent(source: nil)?.location else { return nil }
 
-    // MARK: - Click
+        for app in NSWorkspace.shared.runningApplications {
+            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            var windowsRef: CFTypeRef?
+            guard
+                AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+                let windows = windowsRef as? [AXUIElement]
+            else { continue }
+
+            for window in windows {
+                var posRef: CFTypeRef?
+                var sizeRef: CFTypeRef?
+                guard
+                    AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &posRef) == .success,
+                    AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeRef) == .success,
+                    let pv = posRef, let sv = sizeRef
+                else { continue }
+
+                var pos = CGPoint.zero
+                var size = CGSize.zero
+                AXValueGetValue(pv as! AXValue, .cgPoint, &pos)
+                AXValueGetValue(sv as! AXValue, .cgSize, &size)
+
+                let rect = CGRect(x: pos.x, y: pos.y, width: size.width, height: size.height)
+                if rect.contains(mouseLocation) {
+                    return (app, rect)
+                }
+            }
+        }
+        return nil
+    }  // MARK: - Click
 
     public static func click(_ button: Button, at point: CGPoint) {
         let src = eventSource()

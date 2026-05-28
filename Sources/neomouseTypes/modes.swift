@@ -37,7 +37,9 @@ public struct NeomouseType {
         case gg  // `gg`
         case ggy
         case ggv  // for select all similar to vim's `ggVG`
-        case ctrlW  // Ctrl-w pressed, awaiting window command
+        //TODO Rename to window as CTRL should not be used
+        case special  // Wanted to name is "super" but it is a reserved keyword.
+        case window  // Ctrl-w pressed, awaiting window command
         case setMark  // `m` pressed, awaiting mark name
         // `'` pressed, awaiting set mark to go to exact location. Similar to vim `
         case goToMark
@@ -49,6 +51,17 @@ public struct NeomouseType {
         //TODO nice to have
         // case setMacro // 'q' pressed, awaiting macro name
         // case goToMacro // '@' pressed, awaiting set macro name to go to
+    }
+
+    /// Which sub-menu owns the keystrokes when `.menu` is active. Lets the
+    /// global event-tap dispatch route ←/→/↑/↓/Return/printable-chars to the
+    /// right singleton without resorting to runtime "which window is visible"
+    /// checks. Each menu's `show()` also guards on its matching variant so a
+    /// stale `.menu(window: .marks)` mode can't accidentally summon the
+    /// RegisterMenu (and vice-versa).
+    public enum MenuWindow: Sendable, Equatable {
+        case marks
+        case register
     }
 
     // MARK: - Mode
@@ -72,7 +85,7 @@ public struct NeomouseType {
             // Typing a character resets to nil.
             suggestionIndex: Int?
         )
-        case menu
+        case menu(window: MenuWindow)
     }
 
     public enum ConfigMode: String, Decodable, Sendable {

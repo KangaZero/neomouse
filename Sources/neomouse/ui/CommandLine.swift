@@ -157,9 +157,74 @@ final class CommandLine {
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             return
         case .marks, .m:
-            appState.mode = .menu
+            appState.mode = .menu(window: .marks)
             MarksMenu.shared.passAppState(state: appState)
             MarksMenu.shared.toggle()
+            return
+        case .registers, .reg:
+            appState.mode = .menu(window: .register)
+            RegisterMenu.shared.passAppState(state: appState)
+            RegisterMenu.shared.toggle()
+            return
+        case .restart, .r:
+            // Relaunch via SwiftPM in dev. We can't exec-in-place because
+            // `swift run` does a build step first — so spawn a detached
+            // /bin/sh child that sleeps just long enough for *this* process to
+            // exit cleanly (pasteboard timer, event tap, etc.), then `cd`s into
+            // the package root and runs `swift run`. Argv-passed root (`$1`)
+            // rather than string-interpolated so paths with spaces don't break
+            // the script. macOS reparents the orphaned shell to launchd, so it
+            // survives our NSApp.terminate. Accessibility permission carries
+            // across the restart because the rebuilt binary keeps the same
+            // .build path.
+            guard let executablePath = Bundle.main.executablePath else {
+                return ToastManager.shared.show("restart: Bundle.main.executablePath is nil")
+            }
+            var root = URL(fileURLWithPath: executablePath).deletingLastPathComponent()
+            while root.path != "/"
+                && !FileManager.default.fileExists(
+                    atPath: root.appendingPathComponent("Package.swift").path)
+            {
+                root = root.deletingLastPathComponent()
+            }
+            guard root.path != "/" else {
+                return ToastManager.shared.show("restart: could not locate Package.swift")
+            }
+            let task = Process()
+            task.launchPath = "/bin/sh"
+            task.arguments = [
+                "-c", "sleep 0.5 && cd \"$1\" && swift run", "sh", root.path,
+            ]
+            do {
+                try task.run()
+            } catch {
+                return ToastManager.shared.show("restart: failed to spawn — \(error)")
+            }
+            ToastManager.shared.show("Restarting…")
+            // Defer the exit so the toast renders and the executor returns
+            // before we yank the process out from under AppKit.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                // Release any held synthesized mouse button before exit —
+                // applicationWillTerminate normally handles this, but exit(0)
+                // bypasses it. Without this, `:restart` mid-visual-mode leaves
+                // the user with a stuck drag after the rebuild lands. mouseUp
+                // is safe to post even when nothing is held — the system
+                // ignores the event when button state is already up.
+                if let loc = Mouse.location() {
+                    Mouse.up(.left, at: loc)
+                    Mouse.up(.right, at: loc)
+                }
+                // exit(0) instead of NSApp.terminate(nil) because terminate
+                // routes through applicationShouldTerminate → applicationWill
+                // Terminate, and any in-flight Task / Timer / runloop source
+                // can stall that path long enough for the spawned `swift run`
+                // to bring up the new process alongside the still-dying old
+                // one — net result is two CGEventTaps catching every keystroke
+                // and every keyDown firing twice. exit(0) skips the AppKit
+                // shutdown ceremony and guarantees the kernel reaps our event
+                // tap before the successor process boots.
+                exit(0)
+            }
             return
         case .quit, .q:
             NSApp.terminate(nil)

@@ -58,6 +58,42 @@ public enum Pasteboard {
         }
         return item
     }
+    /// One-shot pasteboard race-fix. Capture `NSPasteboard.general.changeCount`
+    /// at the caller, trigger whatever async action will write to the
+    /// pasteboard (synthesized ⌘C, screenshot pipeline, AppleScript paste,
+    /// etc.), then call this — it polls until the changeCount advances past
+    /// the captured value, then hands you the new top item.
+    ///
+    /// Use this instead of `DispatchQueue.main.asyncAfter(0.1)` after any
+    /// pasteboard-mutating action. Fixed delays guess wrong on big retina
+    /// screenshots / slow apps; changeCount is the OS's truth-source for
+    /// "did the pasteboard actually change."
+    ///
+    /// Times out after `timeout` seconds — on timeout `onChange` receives
+    /// `nil`. Callers should log + skip rather than write stale content into a
+    /// register.
+    @MainActor
+    public static func waitForChange(
+        after initialCount: Int,
+        timeout: TimeInterval = 1.5,
+        poll: TimeInterval = 0.02,
+        onChange: @escaping @MainActor (NSPasteboardItem?) -> Void
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        func tick() {
+            if NSPasteboard.general.changeCount != initialCount {
+                onChange(NSPasteboard.general.pasteboardItems?.first)
+                return
+            }
+            if Date() >= deadline {
+                onChange(nil)
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + poll) { tick() }
+        }
+        tick()
+    }
+
     /// Poll `NSPasteboard.general.changeCount` and invoke `onChange` whenever
     /// it ticks. NSPasteboard has no notification API on macOS; polling is the
     /// standard Cocoa pattern (Maccy, Flycut, Clipy, Pasta all do this). 250ms

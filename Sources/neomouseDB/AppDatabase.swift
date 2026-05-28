@@ -63,6 +63,16 @@ public func initializeDB(forceReIntialize: Bool = false) {
                 t.autoIncrementedPrimaryKey("id")
                 t.column("register", .text).notNull()
                 t.column("content", .blob).notNull()
+                // Nullable — only set when the source app exposed a URL via
+                // public.url (hyperlink copies) or org.chromium.source-url
+                // (Chrome page-source). Plain text copies leave this nil.
+                t.column("originURL", .text)
+                // Bundle identifier of the frontmost app at the moment Register
+                // .set ran. Resolved to icon + display name at render time via
+                // NSWorkspace — storing only the bundle ID keeps the row stable
+                // even if the app is uninstalled. Nullable because some entry
+                // points (launch-time seed) run with no meaningful frontmost.
+                t.column("sourceAppBundleId", .text)
                 t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
                 t.belongsTo("session", onDelete: .cascade).notNull()
                 // Vim semantics: per session, each register name is unique. Lets

@@ -43,12 +43,34 @@ public enum Gesture {
         postGestureEvent(src: src, type: .magnify, value: 0, phase: .ended, at: point)
     }
 
+    // public static func smartMagnify(at point: CGPoint) {
+    //     debug("smartMagnify at \(point)")
+    //     let src = Mouse.eventSource()
+    //     // smartMagnify is a one-shot toggle, not a phased gesture — a single
+    //     // event with value=1 mirrors what a real two-finger double-tap emits.
+    //     postGestureEvent(src: src, type: .smartMagnify, value: 1, phase: .began, at: point)
+    // }
     public static func smartMagnify(at point: CGPoint) {
-        debug("smartMagnify at \(point)")
+        debug("twoFingerDoubleTap at \(point)")
         let src = Mouse.eventSource()
-        // smartMagnify is a one-shot toggle, not a phased gesture — a single
-        // event with value=1 mirrors what a real two-finger double-tap emits.
-        postGestureEvent(src: src, type: .smartMagnify, value: 1, phase: .began, at: point)
+
+        func postTwoFingerTouch() {
+            let event = CGEvent(source: src)
+            event?.type = CGEventType(rawValue: 29)!  // kCGEventGesture
+            event?.setIntegerValueField(CGEventField(rawValue: 9)!, value: 2)
+            event?.location = point
+            event?.post(tap: .cghidEventTap)
+        }
+
+        // First tap (began + ended)
+        postTwoFingerTouch()
+        postTwoFingerTouch()
+
+        Thread.sleep(forTimeInterval: 0.05)
+
+        // Second tap (began + ended)
+        postTwoFingerTouch()
+        postTwoFingerTouch()
     }
 
     public static func rotate(degrees: Double, at point: CGPoint, incrementsPerGesture: UInt) {

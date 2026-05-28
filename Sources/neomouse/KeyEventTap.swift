@@ -72,12 +72,10 @@ extension NeoMouse {
                                 default: false
                                 }
                             let mods = nsEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                            //IMPORTANT: Disable control when in command or menu mode as they are used
-                            //TODO think about what to do with Ctrl w in normal mode
-                            // Commmented out as CTRL will be used in normal mode as well, maybe remap to a super key like nvim??
-                            //|| (!isCommandOrMenuMode && mods.contains(.control))
+                            //IMPORTANT: Disable control when in command or menu mode as they are used (e.g. Ctrl-n / Ctrl-p)
                             let hasSystemMod =
                                 mods.contains(.command)
+                                || (!isCommandOrMenuMode && mods.contains(.control))
                                 || mods.contains(.option)
                             let keyCode = nsEvent.keyCode
                             let isSpecialKey: Bool = {

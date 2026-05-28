@@ -17,6 +17,13 @@ public struct Register: Codable, Identifiable, FetchableRecord, MutablePersistab
     public var id: Int64?
     public var register: String  //INFO: follow same naming as Vim — single letter / digit / quote
     public var content: Data  //INFO: NSKeyedArchiver blob of [typeRawValue: Data]
+    /// URL the source app exposed at copy time (public.url / Chrome's
+    /// org.chromium.source-url). nil for plain text/image copies.
+    public var originURL: String?
+    /// Bundle ID of the app that was frontmost when this entry was written.
+    /// Resolved to icon + display name at render time. nil for launch-time
+    /// seeds where "frontmost" isn't a meaningful concept.
+    public var sourceAppBundleId: String?
     public var createdAt: Date
     public var sessionId: Int64
 
@@ -24,6 +31,8 @@ public struct Register: Codable, Identifiable, FetchableRecord, MutablePersistab
         static let id = Column(CodingKeys.id)
         static let register = Column(CodingKeys.register)
         static let content = Column(CodingKeys.content)
+        static let originURL = Column(CodingKeys.originURL)
+        static let sourceAppBundleId = Column(CodingKeys.sourceAppBundleId)
         static let createdAt = Column(CodingKeys.createdAt)
         static let sessionId = Column(CodingKeys.sessionId)
     }
@@ -99,6 +108,14 @@ public struct Register: Codable, Identifiable, FetchableRecord, MutablePersistab
                     "Register - get: Invalid register \(register). registers must be a single letter or number.")
             }
             let data = try encode(item)
+            let originURL = extractOriginURL(from: item)
+            // NSWorkspace.frontmostApplication reflects the app that was on top
+            // when the synthesized ⌘C ran. NeoMouse is a non-activating event
+            // tap, so for yank flows this stays as Safari/Chrome/etc. across
+            // the brief DispatchQueue.main.async hop. For the launch-time seed
+            // it'll be the terminal/Xcode that spawned us — accurate, if not
+            // particularly useful.
+            let bundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             try dbQueue.write { db in
                 if var existing =
                     try Register
@@ -107,11 +124,16 @@ public struct Register: Codable, Identifiable, FetchableRecord, MutablePersistab
                     .fetchOne(db)
                 {
                     existing.content = data
+                    existing.originURL = originURL
+                    existing.sourceAppBundleId = bundleId
+                    existing.createdAt = Date()
                     try existing.update(db)
                 } else {
                     var newRegister = Register(
                         register: register,
                         content: data,
+                        originURL: originURL,
+                        sourceAppBundleId: bundleId,
                         createdAt: Date(),
                         sessionId: sessionId
                     )
@@ -121,6 +143,19 @@ public struct Register: Codable, Identifiable, FetchableRecord, MutablePersistab
         } catch {
             debug("Register.set error: ", error)
         }
+    }
+
+    /// Pull a usable URL string out of the pasteboard item. Prefers
+    /// `public.url` (set by every Mac browser on hyperlink-copy and by Finder
+    /// for file copies). Falls back to Chrome's private
+    /// `org.chromium.source-url`, which is set whenever the user copies text
+    /// from a page and carries the page URL itself. Returns nil for anything
+    /// else.
+    private static func extractOriginURL(from item: NSPasteboardItem) -> String? {
+        if let s = item.string(forType: .URL), !s.isEmpty { return s }
+        let chromeKey = NSPasteboard.PasteboardType("org.chromium.source-url")
+        if let s = item.string(forType: chromeKey), !s.isEmpty { return s }
+        return nil
     }
 
     public static func delete(register: String, sessionId: Int64) {

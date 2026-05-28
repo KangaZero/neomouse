@@ -98,7 +98,7 @@ public struct Config: Decodable, Sendable {
         public static let defaultAvailable: [Command] = [
             .numbers, .nu, .relativenumbers, .rnu, .cursorline, .cul, .cursorcolumn, .cuc, .cursor, .c, .help, .h,
             .delmarks, .delm,
-            .registers, .reg, .jumps, .ju, .m, .marks, .q, .quit,
+            .registers, .reg, .jumps, .ju, .m, .marks, .restart, .r, .q, .quit,
         ]
     }
 
@@ -113,6 +113,7 @@ public struct Config: Decodable, Sendable {
         case help, h
         case delmarks, delm
         case marks, m
+        case restart, r
         case q, quit
     }
 

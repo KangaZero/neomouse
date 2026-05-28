@@ -74,13 +74,21 @@ public enum Screen {
                 //TODO: Not sure how to test this properly. So far will work if there are only 2 displays, but not sure if more are added.
                 switch at {
                 case .right:
-                    return displayRect.minX >= currentDisplayRect.maxX && displayRect.maxX > currentDisplayRect.maxX
+                    return currentDisplayRect.maxX == displayRect.minX && currentDisplayRect.minX < displayRect.minX
+                        && currentDisplayRect.maxX < displayRect.maxX
+                // return displayRect.minX >= currentDisplayRect.maxX && displayRect.maxX > currentDisplayRect.maxX
                 case .left:
-                    return displayRect.maxX <= currentDisplayRect.minX && displayRect.minX < currentDisplayRect.minX
+                    return currentDisplayRect.minX == displayRect.maxX && currentDisplayRect.minX > displayRect.minX
+                        && currentDisplayRect.maxX > displayRect.maxX
+                // return displayRect.maxX <= currentDisplayRect.minX && displayRect.minX < currentDisplayRect.minX
                 case .down:
-                    return displayRect.minY >= currentDisplayRect.maxY && displayRect.maxY > currentDisplayRect.maxY
+                    return currentDisplayRect.maxY == displayRect.minY && currentDisplayRect.minY < displayRect.minY
+                        && currentDisplayRect.maxY < displayRect.maxY
+                // return displayRect.minY >= currentDisplayRect.maxY && displayRect.maxY > currentDisplayRect.maxY
                 case .up:
-                    return displayRect.maxY >= currentDisplayRect.minY && displayRect.minY < currentDisplayRect.minY
+                    return currentDisplayRect.minY == displayRect.maxY && currentDisplayRect.minY > displayRect.minY
+                        && currentDisplayRect.maxY > displayRect.maxY
+                // return displayRect.maxY >= currentDisplayRect.minY && displayRect.minY < currentDisplayRect.minY
                 }
             })
         else {
