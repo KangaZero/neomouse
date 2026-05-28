@@ -305,6 +305,7 @@ struct NeoMouse: App {
                         appState.gridDivisions = Config.Grid.defaultDivisions
                         appState.mode = .disabled
                         GridOverlay.shared.hideGrid()
+                        CursorSurroundedGridOverlay.shared.hide()
                         HelpDialog.shared.hide()
                         CommandLine.shared.hide()
                         MarksMenu.shared.hide()
@@ -336,9 +337,10 @@ struct NeoMouse: App {
                         )
                         HelpDialog.shared.hide()
                         CommandLine.shared.hide()
+                        GridOverlay.shared.hideGrid()
+                        CursorSurroundedGridOverlay.shared.hide()
                         MarksMenu.shared.hide()
                         RegisterMenu.shared.hide()
-                        // appState.operationCountAsString = nil
                         return
                     default: break
                     }
@@ -465,6 +467,7 @@ struct NeoMouse: App {
                             // so the overlay's `case .specialFind = appState
                             // .mode` guard matches.
                             appState.mode = .specialFind
+                            Zoom.zoomIn()
                             CursorSurroundedGridOverlay.shared.toggle()
                             return
                         default:
@@ -1666,6 +1669,7 @@ struct NeoMouse: App {
                     if event.keyCode == charToKeyCodeMap["Esc"] {
                         guard event.modifierFlags.rawValue == 256 else { break }
                         CursorSurroundedGridOverlay.shared.hide()
+                        Zoom.zoomOut()
                         NeoMouse.enterNormalMode(appState: appState)
                         return
                     }
@@ -1705,7 +1709,15 @@ struct NeoMouse: App {
                         return
                     }
                     Mouse.moveToGlobal(x: target.x, y: target.y)
+                    Zoom.zoomOut()
                     CursorSurroundedGridOverlay.shared.hide()
+                    // Widen the zoom viewport back to the full display once
+                    // the cursor has landed. No-op when zoom isn't active.
+                    if let displayID = Screen.activeDisplays().first(where: {
+                        CGDisplayBounds($0).contains(target)
+                    }) {
+                        Zoom.focus(on: CGDisplayBounds(displayID))
+                    }
                     NeoMouse.enterNormalMode(appState: appState)
                     return
                 }
