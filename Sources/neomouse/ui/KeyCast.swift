@@ -81,6 +81,7 @@ private struct KeyCastView: View {
         case .command(let op, _): return op
         case .disabled: return nil
         case .menu: return nil
+        case .specialFind: return nil
         }
     }
 

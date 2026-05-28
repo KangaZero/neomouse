@@ -217,6 +217,7 @@ struct NeoMouse: App {
         // menus have ever been shown.
         MarksMenu.shared.passAppState(state: appState)
         RegisterMenu.shared.passAppState(state: appState)
+        CursorSurroundedGridOverlay.shared.passAppState(state: appState)
 
         NeoMouse.installKeyEventTap()
 
@@ -312,7 +313,7 @@ struct NeoMouse: App {
                         return
                     }
                 }
-                //TODO take in account of other keyboard layouts
+                //TODO take in account of other keyboard layouts for event.keyCode
                 switch appState.mode {
                 case .disabled:
                     return
@@ -460,11 +461,11 @@ struct NeoMouse: App {
                                 return appState.mode = .normal(
                                     currentPendingOperation: .none, operationCountAsString: nil)
                             }
-                            // let target = MotionTarget.center(
-                            //     screenWidth: currentScreenSize.width,
-                            //     screenHeight: currentScreenSize.height)
-                            // Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                            // appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+                            // Cursor-local dense find. Mode flip *before* show()
+                            // so the overlay's `case .specialFind = appState
+                            // .mode` guard matches.
+                            appState.mode = .specialFind
+                            CursorSurroundedGridOverlay.shared.toggle()
                             return
                         default:
                             //TODO Add indicator, and have Esc reset special instead
@@ -1067,6 +1068,46 @@ struct NeoMouse: App {
                             operationCountAsString: nil
                         )
                         break
+                    case "q":
+                        if var mouseLoc = CGEvent(source: nil)?.location {
+                            mouseLoc.x -= 10
+                            CGWarpMouseCursorPosition(mouseLoc)
+                        }
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        return
+                    case "w":
+                        if var mouseLoc = CGEvent(source: nil)?.location {
+                            mouseLoc.y += 10  // CG y is top-down → +y is visually down
+                            CGWarpMouseCursorPosition(mouseLoc)
+                        }
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        return
+                    case "e":
+                        if var mouseLoc = CGEvent(source: nil)?.location {
+                            mouseLoc.y -= 10
+                            CGWarpMouseCursorPosition(mouseLoc)
+                        }
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        return
+                    case "r":
+                        if var mouseLoc = CGEvent(source: nil)?.location {
+                            mouseLoc.x += 10
+                            CGWarpMouseCursorPosition(mouseLoc)
+                        }
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        return
                     case "'":  //goToMark
                         guard event.modifierFlags.rawValue == 256 else {
                             return appState.mode = .normal(
@@ -1363,22 +1404,22 @@ struct NeoMouse: App {
                         appState.mode = .normal(currentPendingOperation: .setMark, operationCountAsString: nil)
                         break
                     //INFO: Instead of vim's replace single char, this is the rotate gesture
-                    case "r":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        Gesture.rotate(
-                            degrees: appState.degreesToRotate, at: currentCGPoint,
-                            incrementsPerGesture:
-                                appState.incrementsPerGesture)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
+                    // case "r":
+                    //     guard event.modifierFlags.rawValue == 256 else {
+                    //         return appState.mode = .normal(
+                    //             currentPendingOperation: .none,
+                    //             operationCountAsString: nil
+                    //         )
+                    //     }
+                    //     Gesture.rotate(
+                    //         degrees: appState.degreesToRotate, at: currentCGPoint,
+                    //         incrementsPerGesture:
+                    //             appState.incrementsPerGesture)
+                    //     appState.mode = .normal(
+                    //         currentPendingOperation: .none,
+                    //         operationCountAsString: nil
+                    //     )
+                    //     break
                     case "R":
                         guard
                             event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
@@ -1657,6 +1698,57 @@ struct NeoMouse: App {
                             return
                         }
                     }
+                case .specialFind:
+                    // One-shot: Esc cancels; any keystroke that maps to a cell
+                    // in the dense 6×6 inner-character grid lands the mouse on
+                    // that cell's CG-global center via Mouse.moveToGlobal,
+                    // then exits to normal. Modifier chords are rejected so
+                    // Cmd-* / Ctrl-* keep flowing to the OS untouched.
+                    if event.keyCode == charToKeyCodeMap["Esc"] {
+                        guard event.modifierFlags.rawValue == 256 else { break }
+                        CursorSurroundedGridOverlay.shared.hide()
+                        NeoMouse.enterNormalMode(appState: appState)
+                        return
+                    }
+                    guard
+                        event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                            .isSubset(of: [.shift, .capsLock])
+                    else { break }
+                    guard
+                        let keyChar = charToKeyCodeMap.first(where: { $0.value == event.keyCode })?
+                            .key
+                    else {
+                        debug(".specialFind: no charToKeyCodeMap entry for keyCode \(event.keyCode)")
+                        return
+                    }
+                    guard
+                        let cellIndex = appState.findModeInnerGridDivisionCharacters.firstIndex(
+                            of: keyChar)
+                    else {
+                        debug(
+                            ".specialFind: '\(keyChar)' not in findModeInnerGridDivisionCharacters")
+                        return
+                    }
+                    let divisions = CursorSurroundedGridOverlay.divisions
+                    guard cellIndex < divisions * divisions else {
+                        debug(
+                            ".specialFind: cellIndex \(cellIndex) exceeds grid capacity \(divisions * divisions)"
+                        )
+                        return
+                    }
+                    let col = cellIndex % divisions
+                    let row = cellIndex / divisions
+                    guard
+                        let target = CursorSurroundedGridOverlay.shared.cellCenterCG(
+                            col: col, row: row)
+                    else {
+                        debug(".specialFind: cellCenterCG returned nil — overlay not shown?")
+                        return
+                    }
+                    Mouse.moveToGlobal(x: target.x, y: target.y)
+                    CursorSurroundedGridOverlay.shared.hide()
+                    NeoMouse.enterNormalMode(appState: appState)
+                    return
                 }
 
                 //INFO: after every non-integer keypress, excluding 0 which can be both a command and a count, we reset the operationCountAsString to nil to reset the count for the next operation

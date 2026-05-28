@@ -31,6 +31,18 @@ public enum Mouse {
     /// cursor as part of dispatch — replaces `CGWarpMouseCursorPosition` so
     /// observers of the event stream (overlay listeners, accessibility tools,
     /// target apps) see the move.
+    //TODO BROKEN UNDER ACCESSIBILITY ZOOM. The CGEvent.post path here gets
+    //its cursorPosition remapped by the macOS Zoom transform, so the cursor
+    //lands at the zoomed-coordinate position rather than the CG-global one
+    //we passed in. moveRelative and moveToScreenLocal both funnel through
+    //this fn so they break the same way. Working pattern proven in the
+    //q/w/e/r cases in NeoMouseApp.swift: `CGWarpMouseCursorPosition(point)`
+    //is below the zoom layer and honours the position exactly. Fix is to
+    //warp first (authoritative position write) and then *also* post the
+    //event purely for observer notification — accept that under zoom the
+    //post is best-effort. Also add `CGAssociateMouseAndMouseCursorPosition(1)`
+    //right after the warp so HID input stays responsive (warp disassociates
+    //for ~250ms by default).
     public static func moveToGlobal(x: CGFloat, y: CGFloat, isMoveToScreenLocal: Bool = false) {
         // Clamp to the union of all active displays so a caller passing a
         // stale/out-of-bounds point (e.g. a mark recorded on a now-disconnected
@@ -38,6 +50,8 @@ public enum Mouse {
         let bounds = Screen.allBoundingRect()
         let clampedX: CGFloat
         let clampedY: CGFloat
+        debug("bounds in moveToGlobal: \(bounds), x: \(x), y: \(y)")
+
         if bounds.isNull {
             // No active displays (CGRect.null.minX == .infinity — clamping
             // would yield NaN). Degrade to a pass-through.
@@ -109,6 +123,7 @@ public enum Mouse {
         //     return
         // }
         let currentBounds = CGDisplayBounds(currentDisplayId)
+        debug("\(current), currentBounts")
         let allScreensRect = Screen.allBoundingRect()
 
         // CG coords: y increases downward, so positive y = move down

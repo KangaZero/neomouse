@@ -86,6 +86,12 @@ public struct NeomouseType {
             suggestionIndex: Int?
         )
         case menu(window: MenuWindow)
+        /// Cursor-local one-shot find: a small dense grid pops up around the
+        /// cursor and a single keypress lands the mouse on the picked cell.
+        /// No associated state — the CursorSurroundedGridOverlay singleton
+        /// holds the box origin (in CG global) that the keyHandler reads to
+        /// resolve cell index → screen position.
+        case specialFind
     }
 
     public enum ConfigMode: String, Decodable, Sendable {
