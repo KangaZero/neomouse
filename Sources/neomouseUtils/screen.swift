@@ -30,77 +30,70 @@ public enum Screen {
         }
     }
 
-    //TODO add in test for this
+    /// Find the display rect adjacent to `current` in `direction`. Pure —
+    /// caller supplies the display list + current rect, so this is testable
+    /// without real CGDisplay state. `adjacentDisplayRectByDirection(at:)`
+    /// is the impure wrapper that queries `activeDisplays()` + cursor.
+    ///
+    /// Predicate: a candidate display matches when it (a) edge-touches
+    /// `current` along the chosen axis and (b) overlaps `current` on the
+    /// *orthogonal* axis. The orthogonal-overlap check is what makes this
+    /// correct on grid layouts — without it, `.right` from a 5x5 grid's
+    /// (2, 2) would match any display in column 3 and `first(where:)` would
+    /// return whichever happened to come first in the display list, not
+    /// necessarily the one in row 2.
+    ///
+    /// CG coord conventions: y increases downward. `.down` means the
+    /// candidate sits *below* current visually, i.e. its `minY` equals
+    /// current's `maxY`. `.up` is the inverse.
+    public static func adjacentDisplayRect(
+        displays: [CGRect],
+        current: CGRect,
+        direction: NeomouseType.Direction
+    ) -> CGRect? {
+        displays.first(where: { display in
+            guard display != current else { return false }
+            switch direction {
+            case .right:
+                return current.maxX == display.minX && haveYOverlap(current, display)
+            case .left:
+                return current.minX == display.maxX && haveYOverlap(current, display)
+            case .down:
+                return current.maxY == display.minY && haveXOverlap(current, display)
+            case .up:
+                return current.minY == display.maxY && haveXOverlap(current, display)
+            }
+        })
+    }
+
+    private static func haveYOverlap(_ a: CGRect, _ b: CGRect) -> Bool {
+        !(a.maxY <= b.minY || b.maxY <= a.minY)
+    }
+
+    private static func haveXOverlap(_ a: CGRect, _ b: CGRect) -> Bool {
+        !(a.maxX <= b.minX || b.maxX <= a.minX)
+    }
+
     public static func adjacentDisplayRectByDirection(at: NeomouseType.Direction) -> CGRect? {
         let displayIDs = activeDisplays()
-        guard !displayIDs.isEmpty && displayIDs.count > 1 else {
+        guard displayIDs.count > 1 else {
             debug(
-                "Screen.getAdjacentDisplayRectByDirection: display count is \(displayIDs.count); need at least 2 for adjacentRect to be meaningful"
+                "Screen.adjacentDisplayRectByDirection: display count is \(displayIDs.count); need at least 2 for adjacentRect to be meaningful"
             )
             return nil
         }
-        //TODO check whether or not mouse location is always valid
         guard let mouseLocation = Mouse.location() else {
-            debug("Screen.getAdjacentDisplayRectByDirection: could not get mouse location")
+            debug("Screen.adjacentDisplayRectByDirection: could not get mouse location")
             return nil
         }
-
-        guard
-            let currentDisplayRect =
-                displayIDs
-                .first(where: { CGDisplayBounds($0).contains(mouseLocation) })
-                .map({ CGDisplayBounds($0) })
-        else {
+        let displays = displayIDs.map { CGDisplayBounds($0) }
+        guard let current = displays.first(where: { $0.contains(mouseLocation) }) else {
             debug(
-                "Screen.getAdjacentDisplayRectByDirection: could not find display under cursor; cannot determine adjacent display by direction"
+                "Screen.adjacentDisplayRectByDirection: no display under cursor at \(mouseLocation)"
             )
             return nil
         }
-        guard
-            let nextDisplayIndex = displayIDs.first(where: { display in
-                guard
-                    display
-                        != displayIDs
-                        .first(where: { CGDisplayBounds($0).contains(mouseLocation) })
-                else { return false }
-
-                let displayRect = CGDisplayBounds(display)
-                debug(
-                    "current display x: [min \(currentDisplayRect.minX), max \(currentDisplayRect.maxX)], y: [min \(currentDisplayRect.minY), max \(currentDisplayRect.maxY)]"
-                )
-                debug(
-                    "candidate display x: [min \(displayRect.minX), max \(displayRect.maxX)], y: [min \(displayRect.minY), max \(displayRect.maxY)]"
-                )
-                //TODO: Not sure how to test this properly. So far will work if there are only 2 displays, but not sure if more are added.
-                switch at {
-                case .right:
-                    return currentDisplayRect.maxX == displayRect.minX && currentDisplayRect.minX < displayRect.minX
-                        && currentDisplayRect.maxX < displayRect.maxX
-                // return displayRect.minX >= currentDisplayRect.maxX && displayRect.maxX > currentDisplayRect.maxX
-                case .left:
-                    return currentDisplayRect.minX == displayRect.maxX && currentDisplayRect.minX > displayRect.minX
-                        && currentDisplayRect.maxX > displayRect.maxX
-                // return displayRect.maxX <= currentDisplayRect.minX && displayRect.minX < currentDisplayRect.minX
-                case .down:
-                    return currentDisplayRect.maxY == displayRect.minY && currentDisplayRect.minY < displayRect.minY
-                        && currentDisplayRect.maxY < displayRect.maxY
-                // return displayRect.minY >= currentDisplayRect.maxY && displayRect.maxY > currentDisplayRect.maxY
-                case .up:
-                    return currentDisplayRect.minY == displayRect.maxY && currentDisplayRect.minY > displayRect.minY
-                        && currentDisplayRect.maxY > displayRect.maxY
-                // return displayRect.maxY >= currentDisplayRect.minY && displayRect.minY < currentDisplayRect.minY
-                }
-            })
-        else {
-            debug(
-                "Screen.getAdjacentDisplayRectByDirection: could not find adjacent display in direction \(at) from current display; maybe no displays are arranged in that direction?"
-            )
-            return nil
-        }
-        debug("nextDisplayIndex: \(nextDisplayIndex)")
-        debug("displays: \(displayIDs)")
-        //IMPORTANT: Need to substract 1 as displayIDs start from 1, and indexing beyond will cause out of bounds error
-        return CGDisplayBounds(displayIDs[(Int(nextDisplayIndex) - 1)])
+        return adjacentDisplayRect(displays: displays, current: current, direction: at)
     }
 
     /// Rect of the next display in `activeDisplays` order, wrapping around.
