@@ -97,9 +97,7 @@ public enum Zoom {
         // toggle definitely landed; when they don't, you'd need to poll
         // briefly to confirm. Kept synchronous to avoid adding a Task hop
         // just for diagnostics.
-        let after = currentZoomFactor
-        debug("isCurrentlyZoomed : \(isCurrentlyZoomed)")
-        debug("Zoom.toggle: after (user-enabled: \(isUserEnabled))")
+        _ = currentZoomFactor
     }
 
     public static func zoomIn() {

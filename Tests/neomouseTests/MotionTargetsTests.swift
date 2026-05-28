@@ -93,32 +93,47 @@ struct MotionTargetsTests {
 
     // MARK: - toLineCount (`Ng`)
 
-    @Test("Ng at count=1 lands near the top")
+    @Test("Ng at count=1 lands on the first cell's center")
     func lineCountFirstLine() {
-        // (1080-10)/50 * 1 = 21.4
+        // stepY = (1080 - 2*10) / 50 = 21.2
+        // y = inset + (1 - 0.5) * stepY = 10 + 0.5 * 21.2 = 20.6
         let p = MotionTarget.toLineCount(
             localX: 0, screenHeight: 1080, gridInset: 10, rowsOnScreen: 50, count: 1)
-        #expect(abs(p.y - 21.4) < 0.0001)
+        #expect(abs(p.y - 20.6) < 0.0001)
     }
 
-    @Test("Ng at count=rowsOnScreen lands near the bottom (off-by-inset)")
+    @Test("Ng at count=rowsOnScreen lands half a cell above the bottom edge")
     func lineCountLastLine() {
-        // (1080-10)/50 * 50 = 1070 == bottom (screenHeight - inset)
+        // Cell center of the last row:
+        //   stepY = (1080 - 2*10) / 50 = 21.2
+        //   y = 10 + (50 - 0.5) * 21.2 = 10 + 49.5 * 21.2 = 1059.4
         let p = MotionTarget.toLineCount(
             localX: 0, screenHeight: 1080, gridInset: 10, rowsOnScreen: 50, count: 50)
-        #expect(p.y == 1070)
-        // matches MotionTarget.bottom for this case:
+        #expect(abs(p.y - 1059.4) < 0.0001)
+        // No longer coincides with MotionTarget.bottom (the bottom edge) —
+        // they're separated by half a cell. This is the cell-center vs
+        // cell-edge fix.
         let b = MotionTarget.bottom(localX: 0, screenHeight: 1080, gridInset: 10)
-        #expect(p.y == b.y)
+        let stepY = (1080.0 - 2 * 10.0) / 50.0  // 21.2
+        #expect(abs((b.y - p.y) - stepY / 2) < 0.0001)
     }
 
-    @Test("Ng scales linearly with count")
-    func lineCountLinear() {
+    @Test("Ng spacing between consecutive counts equals stepY")
+    func lineCountDeltaIsStepY() {
+        // Linearity in the old (incorrect) formula held only because no
+        // leading inset was added. The corrected formula is affine
+        // (y = inset + (n - 0.5) * step), so doubling count no longer
+        // doubles y — but the *delta* between consecutive counts is still
+        // exactly stepY. That's the testable invariant.
+        let stepY = (1080.0 - 2 * 10.0) / 50.0  // 21.2
         let p5 = MotionTarget.toLineCount(
             localX: 0, screenHeight: 1080, gridInset: 10, rowsOnScreen: 50, count: 5)
+        let p6 = MotionTarget.toLineCount(
+            localX: 0, screenHeight: 1080, gridInset: 10, rowsOnScreen: 50, count: 6)
+        #expect(abs((p6.y - p5.y) - stepY) < 0.0001)
         let p10 = MotionTarget.toLineCount(
             localX: 0, screenHeight: 1080, gridInset: 10, rowsOnScreen: 50, count: 10)
-        #expect(abs(p10.y - 2 * p5.y) < 0.0001)
+        #expect(abs((p10.y - p5.y) - 5 * stepY) < 0.0001)
     }
 
     @Test("Ng preserves localX")

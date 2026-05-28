@@ -49,8 +49,13 @@ public enum MotionTarget {
         CGPoint(x: screenWidth / 2, y: localY)
     }
 
-    /// `Ng` — jump to "row N" of `rowsOnScreen` evenly-divided rows.
-    /// Y = (screenHeight - gridInset) / rowsOnScreen * count.
+    /// `Ng` — jump to row N (1-based) of `rowsOnScreen` evenly-divided rows.
+    /// Lands on the *center* of the target cell, with both top and bottom
+    /// insets accounted for — matches `NumbersOverlay.snapCursor` and the
+    /// `hjkl` step formula at `NeoMouseApp.swift:1049-1057`. Earlier version
+    /// used `(H - inset) / rows * count` which subtracted the inset once
+    /// instead of twice and anchored to the cell *edge*, so `4g` landed half
+    /// a cell below where row 4 highlights in the overlay.
     public static func toLineCount(
         localX: CGFloat,
         screenHeight: CGFloat,
@@ -58,12 +63,15 @@ public enum MotionTarget {
         rowsOnScreen: Int,
         count: CGFloat
     ) -> CGPoint {
-        CGPoint(
+        let stepY = (screenHeight - 2 * gridInset) / CGFloat(rowsOnScreen)
+        return CGPoint(
             x: localX,
-            y: (screenHeight - gridInset) / CGFloat(rowsOnScreen) * count
+            y: gridInset + (count - 0.5) * stepY
         )
     }
 
+    /// `N|` — jump to column N (1-based). Same cell-center / both-inset
+    /// math as `toLineCount`.
     public static func toColumnCount(
         localY: CGFloat,
         screenWidth: CGFloat,
@@ -71,12 +79,15 @@ public enum MotionTarget {
         columnsOnScreen: Int,
         count: CGFloat
     ) -> CGPoint {
-        CGPoint(
-            x: (screenWidth - gridInset) / CGFloat(columnsOnScreen) * count,
+        let stepX = (screenWidth - 2 * gridInset) / CGFloat(columnsOnScreen)
+        return CGPoint(
+            x: gridInset + (count - 0.5) * stepX,
             y: localY
         )
     }
 
+    /// Jump to (column N, row M) (both 1-based). Cell-center, both insets,
+    /// matching the overlay.
     public static func toLineAndColumnCount(
         screenWidth: CGFloat,
         screenHeight: CGFloat,
@@ -86,9 +97,11 @@ public enum MotionTarget {
         columnCount: CGFloat,
         lineCount: CGFloat
     ) -> CGPoint {
-        CGPoint(
-            x: (screenWidth - gridInset) / CGFloat(columnsOnScreen) * columnCount,
-            y: (screenHeight - gridInset) / CGFloat(rowsOnScreen) * lineCount
+        let stepX = (screenWidth - 2 * gridInset) / CGFloat(columnsOnScreen)
+        let stepY = (screenHeight - 2 * gridInset) / CGFloat(rowsOnScreen)
+        return CGPoint(
+            x: gridInset + (columnCount - 0.5) * stepX,
+            y: gridInset + (lineCount - 0.5) * stepY
         )
     }
 }

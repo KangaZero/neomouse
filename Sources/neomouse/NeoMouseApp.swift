@@ -1203,42 +1203,46 @@ struct NeoMouse: App {
                             )
                             break
                         }
-                        //TODO move over to currentPendingOperation switch case statement
-                        // "g" instead of "gg" as the following "g" is only appended/updated onto appState after current MainActor event
-                        // if operationCount >= 1 && currentPendingNormalOperation == .g {
-                        //     let _ggUsable = CGRect(
-                        //         x: appState.gridInset,
-                        //         y: appState.gridInset,
-                        //         width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                        //         height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                        //     )
-                        //     let target = MotionTarget.toLineCount(
-                        //         localX: localCGPoint.x,
-                        //         screenHeight: currentScreenSize.height,
-                        //         gridInset: appState.gridInset,
-                        //         rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
-                        //         count: operationCount)
-                        //     Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        //     appState.mode = .normal(
-                        //         currentPendingOperation: .none
-                        //     )
-                        //     appState.operationCountAsString = nil
-                        //     break
-                        // } else if currentPendingNormalOperation == .g {
-                        //     let target = MotionTarget.top(
-                        //         localX: localCGPoint.x,
-                        //         gridInset: appState.gridInset)
-                        //     Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        //     appState.mode = .normal(
-                        //         currentPendingOperation: .gg
-                        //     )
-                        //     //TODO dont reset normal mode just yet, need to account for ggvG
-                        //     //TODO Remove below when v is added
-                        //     // appState.mode = .normal(
-                        //     //     currentPendingOperation: .none
-                        //     // )
-                        //     break
-                        // }
+                        break
+                    case "|":
+                        guard
+                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                                .shift, .capsLock,
+                            ])
+                        else {
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none,
+                                operationCountAsString: nil
+                            )
+                        }
+                        if operationCount > 1 {
+                            debug(
+                                "| - with operationCount=\(operationCount) > 1"
+                            )
+                            let _usable = CGRect(
+                                x: appState.gridInset,
+                                y: appState.gridInset,
+                                width: max(0, currentScreenSize.width - 2 * appState.gridInset),
+                                height: max(0, currentScreenSize.height - 2 * appState.gridInset)
+                            )
+                            let target = MotionTarget.toColumnCount(
+                                localY: localCGPoint.y,
+                                screenWidth: currentScreenSize.width,
+                                gridInset: appState.gridInset,
+                                columnsOnScreen: appState.resolvedGrid(usable: _usable).cols,
+                                count: operationCount)
+                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                        } else {
+                            debug("| - with operationCount 1, go to left of the screen")
+                            let target = MotionTarget.leftEdge(
+                                localY: localCGPoint.y,
+                                gridInset: appState.gridInset)
+                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                        }
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
                         break
                     case "V":
                         appState.isVisual.toggle()
@@ -1366,22 +1370,22 @@ struct NeoMouse: App {
                         appState.mode = .normal(currentPendingOperation: .setMark, operationCountAsString: nil)
                         break
                     //INFO: Instead of vim's replace single char, this is the rotate gesture
-                    // case "r":
-                    //     guard event.modifierFlags.rawValue == 256 else {
-                    //         return appState.mode = .normal(
-                    //             currentPendingOperation: .none,
-                    //             operationCountAsString: nil
-                    //         )
-                    //     }
-                    //     Gesture.rotate(
-                    //         degrees: appState.degreesToRotate, at: currentCGPoint,
-                    //         incrementsPerGesture:
-                    //             appState.incrementsPerGesture)
-                    //     appState.mode = .normal(
-                    //         currentPendingOperation: .none,
-                    //         operationCountAsString: nil
-                    //     )
-                    //     break
+                    case "r":
+                        guard event.modifierFlags.rawValue == 256 else {
+                            return appState.mode = .normal(
+                                currentPendingOperation: .none,
+                                operationCountAsString: nil
+                            )
+                        }
+                        Gesture.rotate(
+                            degrees: appState.degreesToRotate, at: currentCGPoint,
+                            incrementsPerGesture:
+                                appState.incrementsPerGesture)
+                        appState.mode = .normal(
+                            currentPendingOperation: .none,
+                            operationCountAsString: nil
+                        )
+                        break
                     case "R":
                         guard
                             event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
