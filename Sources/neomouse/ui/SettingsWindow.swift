@@ -35,6 +35,35 @@ final class SettingsWindow {
             debug("SettingsWindow.show: appState was never passed")
             return
         }
+        // Force neomouse into .disabled while the Settings panel is open.
+        // Live overlays (visual highlight, marks menu, etc.) would otherwise
+        // fight the Settings window for mouse / focus, and changes to the
+        // theme would race with whatever overlay is already on screen — much
+        // simpler to hand the user a clean slate.
+        //
+        // We mirror the deactivation sequence in MenuBar.toggleActivation:
+        // exit visual if it was active, reset gridDivisions, drop every
+        // overlay, set .disabled. Re-activation is on the user (Cmd-E) after
+        // closing Settings.
+        if case .disabled = appState.mode {
+            // Already disabled — nothing to tear down.
+        } else {
+            if appState.isVisual {
+                NeoMouse.CoreOperations.exitVisualState(
+                    appState: appState,
+                    visualHighlightOverlay: VisualHighlightOverlay.shared
+                )
+            }
+            appState.gridDivisions = Config.Grid.defaultDivisions
+            appState.mode = .disabled
+            GridOverlay.shared.hideGrid()
+            CursorSurroundedGridOverlay.shared.hide()
+            HelpDialog.shared.hide()
+            CommandLine.shared.hide()
+            MarksMenu.shared.hide()
+            RegisterMenu.shared.hide()
+            ToastManager.shared.show("Settings open — NeoMouse paused (⌘E to re-enable after)")
+        }
         if window == nil {
             let win = NSWindow(
                 contentRect: CGRect(x: 0, y: 0, width: 760, height: 620),

@@ -240,11 +240,16 @@ public enum ThemeAnchor: String, Decodable, Sendable, CaseIterable {
     case bottomRight = "bottom_right"
 }
 
-/// Side of the screen for the NumbersOverlay gutter (and a future toggle
-/// for the column strip).
+/// Side of the screen for the NumbersOverlay gutter.
 public enum ThemeDirection: String, Decodable, Sendable, CaseIterable {
     case left
     case right
+}
+
+/// Side of the screen for the NumbersOverlay column strip.
+public enum ThemeVerticalDirection: String, Decodable, Sendable, CaseIterable {
+    case top
+    case bottom
 }
 
 /// SwiftUI Material flavor — picks the level of background blur on a panel.
@@ -352,8 +357,10 @@ public struct GridTheme: Decodable, Sendable {
 
 public struct NumbersOverlayTheme: Decodable, Sendable {
     /// Which side of the screen the line-number gutter sits on. The column
-    /// strip stays at the top for now (parallel toggle is a future TODO).
+    /// Side the line-number gutter sits on.
     public var direction: ThemeDirection
+    /// Side the column-number strip sits on. `.top` = original behavior.
+    public var columnStripDirection: ThemeVerticalDirection
     public var gutterBackground: ThemeColor
     public var cursorLineHighlight: ThemeColor
     public var cursorColumnHighlight: ThemeColor
@@ -366,6 +373,7 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
 
     public init(
         direction: ThemeDirection = .left,
+        columnStripDirection: ThemeVerticalDirection = .top,
         gutterBackground: ThemeColor = .init(red: 0, green: 0, blue: 0, alpha: 0.55),
         cursorLineHighlight: ThemeColor = .init(red: 1, green: 1, blue: 0, alpha: 0.18),
         cursorColumnHighlight: ThemeColor = .init(red: 1, green: 1, blue: 0, alpha: 0.18),
@@ -376,6 +384,7 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
         columnStripHeight: Double = 20
     ) {
         self.direction = direction
+        self.columnStripDirection = columnStripDirection
         self.gutterBackground = gutterBackground
         self.cursorLineHighlight = cursorLineHighlight
         self.cursorColumnHighlight = cursorColumnHighlight
@@ -387,8 +396,8 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case direction, gutterBackground, cursorLineHighlight, cursorColumnHighlight
-        case cursorTextColor, textColor, font, gutterWidth, columnStripHeight
+        case direction, columnStripDirection, gutterBackground, cursorLineHighlight
+        case cursorColumnHighlight, cursorTextColor, textColor, font, gutterWidth, columnStripHeight
     }
 
     public init(from decoder: any Decoder) throws {
@@ -397,6 +406,9 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = NumbersOverlayTheme()
         direction = try c.decodeIfPresent(ThemeDirection.self, forKey: .direction) ?? d.direction
+        columnStripDirection =
+            try c.decodeIfPresent(ThemeVerticalDirection.self, forKey: .columnStripDirection)
+            ?? d.columnStripDirection
         gutterBackground =
             try c.decodeIfPresent(ThemeColor.self, forKey: .gutterBackground) ?? d.gutterBackground
         cursorLineHighlight =
@@ -929,6 +941,13 @@ extension ThemeAnchor {
 extension ThemeDirection {
     public init(from decoder: any Decoder) throws {
         self = try decodeFriendlyEnum(Self.self, fieldName: "direction", decoder: decoder)
+    }
+}
+
+extension ThemeVerticalDirection {
+    public init(from decoder: any Decoder) throws {
+        self = try decodeFriendlyEnum(
+            Self.self, fieldName: "column_strip_direction", decoder: decoder)
     }
 }
 

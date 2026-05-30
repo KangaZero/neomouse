@@ -238,6 +238,7 @@
           "additionalProperties": false,
           "properties": {
             "direction": { "type": "string", "enum": ["left", "right"] },
+            "column_strip_direction": { "type": "string", "enum": ["top", "bottom"] },
             "gutter_background": { "$ref": "#/$defs/themeColor" },
             "cursor_line_highlight": { "$ref": "#/$defs/themeColor" },
             "cursor_column_highlight": { "$ref": "#/$defs/themeColor" },

@@ -7,7 +7,16 @@ import neomouseDB
 import neomouseUtils
 import neomouseTypes
 
-class NeoMouseState: ObservableObject {
+// `@unchecked Sendable` is safe here because every mutation either:
+//   * comes from SwiftUI (always main-actor isolated),
+//   * comes from the CGEventTap callback in KeyEventTap.swift (wrapped in
+//     `MainActor.assumeIsolated` before touching state), or
+//   * comes from a Combine sink that does the same.
+// Without the conformance, the SwiftUI `Binding(get:set:)` helpers added in
+// `ui/SettingsView.swift` produce strict-concurrency warnings on every
+// closure that captures `self` — Binding's `get:` / `set:` are `@Sendable`
+// in the Swift 6 SDK.
+class NeoMouseState: ObservableObject, @unchecked Sendable {
     @Published var mode: NeomouseType.Mode = .disabled
     @Published var gridInset: CGFloat
     //TODO Eventually use Session.Operations Table for the below Published var

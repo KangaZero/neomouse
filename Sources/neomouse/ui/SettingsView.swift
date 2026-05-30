@@ -5,6 +5,13 @@ import neomouseConfig
 import neomouseUtils
 
 // MARK: - Binding helpers
+
+/// Local `@unchecked Sendable` wrapper around a `WritableKeyPath`. Used by
+/// the `binding(_:)` extension below; see comment there for why.
+private struct SendableKeyPath<Root, Value>: @unchecked Sendable {
+    let keyPath: WritableKeyPath<Root, Value>
+}
+
 //
 // Each form control needs a `Binding<T>` into `state.theme.<section>.<field>`.
 // SwiftUI doesn't let you write `$state.theme.toast.width` directly because
@@ -17,11 +24,62 @@ import neomouseUtils
 
 extension NeoMouseState {
     /// Two-way binding into a writable key path on `theme`.
-    func binding<Value>(_ keyPath: WritableKeyPath<Config.Theme, Value>) -> Binding<Value> {
-        Binding(
-            get: { self.theme[keyPath: keyPath] },
-            set: { self.theme[keyPath: keyPath] = $0 }
+    ///
+    /// `Value: Sendable` is required because `Binding.init(get:set:)` takes
+    /// `@Sendable` closures under Swift 6 strict concurrency, and a
+    /// `WritableKeyPath<Root, Value>` is only `Sendable` when both `Root`
+    /// (already-Sendable `Config.Theme`) AND `Value` are. All theme leaf
+    /// types — Double / Int / String / Bool / ThemeColor / ThemeFont / the
+    /// theme enums — already conform, so call sites compile unchanged.
+    func binding<Value: Sendable>(
+        _ keyPath: WritableKeyPath<Config.Theme, Value>
+    ) -> Binding<Value> {
+        // `WritableKeyPath` is a class and isn't `Sendable` (even when both
+        // `Root` and `Value` are), so capturing it in `Binding`'s `@Sendable`
+        // closures triggers a strict-concurrency warning. Wrapping in a
+        // local `@unchecked Sendable` struct silences the warning without
+        // any runtime cost — the key path is immutable, the only mutation
+        // goes through `self.theme`, and `theme` access is main-actor in
+        // practice (SwiftUI updates) or main-actor-isolated (CGEventTap
+        // callback path).
+        let wrapped = SendableKeyPath(keyPath: keyPath)
+        return Binding(
+            get: { self.theme[keyPath: wrapped.keyPath] },
+            set: { self.theme[keyPath: wrapped.keyPath] = $0 }
         )
+    }
+
+    /// Broadcast a single `family / weight / design` triple to every
+    /// `ThemeFont`-typed leaf on `theme`, preserving each leaf's own
+    /// `size`. Used by the Settings window's "Shared Font" section so a
+    /// single picker controls the typeface across every overlay without
+    /// trampling per-element font sizes (grid labels are 60pt, toast text
+    /// is 13pt — they need different sizes even when they share a family).
+    @MainActor
+    func setSharedFontFace(family: String, weight: ThemeFont.Weight, design: ThemeFont.Design) {
+        // Tiny helper to rewrite a font field while keeping its size.
+        func reface(_ font: ThemeFont) -> ThemeFont {
+            ThemeFont(size: font.size, weight: weight, design: design, family: family)
+        }
+        theme.grid.outerLabelFont = reface(theme.grid.outerLabelFont)
+        theme.grid.innerLabelFont = reface(theme.grid.innerLabelFont)
+        theme.grid.cursorSurroundedLabelFont = reface(theme.grid.cursorSurroundedLabelFont)
+        theme.numbersOverlay.font = reface(theme.numbersOverlay.font)
+        theme.commandLine.textFont = reface(theme.commandLine.textFont)
+        theme.commandLine.suggestionFont = reface(theme.commandLine.suggestionFont)
+        theme.marksMenu.headerFont = reface(theme.marksMenu.headerFont)
+        theme.marksMenu.markLabelFont = reface(theme.marksMenu.markLabelFont)
+        theme.marksMenu.cellFont = reface(theme.marksMenu.cellFont)
+        theme.marksMenu.emptyMessageFont = reface(theme.marksMenu.emptyMessageFont)
+        theme.registerMenu.searchFont = reface(theme.registerMenu.searchFont)
+        theme.registerMenu.appNameFont = reface(theme.registerMenu.appNameFont)
+        theme.registerMenu.registerLabelFont = reface(theme.registerMenu.registerLabelFont)
+        theme.registerMenu.cardTextFont = reface(theme.registerMenu.cardTextFont)
+        theme.registerMenu.badgeFont = reface(theme.registerMenu.badgeFont)
+        theme.helpDialog.headerFont = reface(theme.helpDialog.headerFont)
+        theme.helpDialog.keybindFont = reface(theme.helpDialog.keybindFont)
+        theme.toast.textFont = reface(theme.toast.textFont)
+        theme.keyCast.textFont = reface(theme.keyCast.textFont)
     }
 }
 
@@ -175,6 +233,7 @@ enum ThemeWriter {
         [
             "[theme.numbers_overlay]",
             "direction               = \"\(n.direction.rawValue)\"",
+            "column_strip_direction  = \"\(n.columnStripDirection.rawValue)\"",
             "gutter_background       = \"\(n.gutterBackground.hex)\"",
             "cursor_line_highlight   = \"\(n.cursorLineHighlight.hex)\"",
             "cursor_column_highlight = \"\(n.cursorColumnHighlight.hex)\"",
@@ -311,8 +370,11 @@ enum ThemeWriter {
 
 // MARK: - SettingsView
 
-/// Sections shown in the sidebar — order matches what's most-asked.
+/// Sections shown in the sidebar — order matches what's most-asked. "Shared
+/// Font" sits at the top because changing the typeface is the single most
+/// impactful theme tweak (it propagates to every overlay).
 private enum SettingsSection: String, CaseIterable, Identifiable {
+    case sharedFont = "Shared Font"
     case toast = "Toast"
     case keyCast = "Key Cast"
     case visualHighlight = "Visual Highlight"
@@ -327,6 +389,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .sharedFont: return "textformat"
         case .toast: return "bell.fill"
         case .keyCast: return "keyboard"
         case .visualHighlight: return "rectangle.dashed"
@@ -342,7 +405,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @ObservedObject var state: NeoMouseState
-    @State private var selection: SettingsSection = .toast
+    @State private var selection: SettingsSection = .sharedFont
     @State private var saveResult: String?
 
     var body: some View {
@@ -356,6 +419,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 Form {
                     switch selection {
+                    case .sharedFont: SharedFontForm(state: state)
                     case .toast: ToastForm(state: state)
                     case .keyCast: KeyCastForm(state: state)
                     case .visualHighlight: VisualHighlightForm(state: state)
@@ -481,6 +545,83 @@ private struct FontEditor: View {
 // `ColorPicker(supportsOpacity: true)` so users can drag the alpha slider
 // in the system color panel — which is what makes the muted overlays work.
 
+/// Single point of control for the typeface used everywhere in neomouse.
+/// Changing family / weight / design here broadcasts to every `ThemeFont`
+/// leaf on `state.theme` via `setSharedFontFace`, but preserves each
+/// element's per-element font *size* (a grid label at 60pt and a toast
+/// label at 13pt are still 60 and 13 respectively after the broadcast —
+/// only the typeface changes). For per-element size adjustments, see the
+/// individual element's "Font" section.
+///
+/// We use `theme.toast.textFont` as the canonical source of truth for the
+/// currently-displayed family / weight / design so the form's three
+/// controls always reflect the most-recently-broadcast values. Hand-editing
+/// settings.toml to give different elements different families is still
+/// allowed; the next change here will overwrite that divergence.
+private struct SharedFontForm: View {
+    @ObservedObject var state: NeoMouseState
+
+    var body: some View {
+        Section("Typeface (applies to every overlay)") {
+            TextField(
+                "Family (empty = system font)",
+                text: Binding(
+                    get: { state.theme.toast.textFont.family },
+                    set: { newFamily in
+                        let cur = state.theme.toast.textFont
+                        state.setSharedFontFace(
+                            family: newFamily, weight: cur.weight, design: cur.design)
+                    }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Picker(
+                "Weight",
+                selection: Binding(
+                    get: { state.theme.toast.textFont.weight },
+                    set: { newWeight in
+                        let cur = state.theme.toast.textFont
+                        state.setSharedFontFace(
+                            family: cur.family, weight: newWeight, design: cur.design)
+                    })
+            ) {
+                ForEach(Array(ThemeFont.Weight.allCases), id: \.self) { w in
+                    Text(w.rawValue).tag(w)
+                }
+            }
+
+            Picker(
+                "Design",
+                selection: Binding(
+                    get: { state.theme.toast.textFont.design },
+                    set: { newDesign in
+                        let cur = state.theme.toast.textFont
+                        state.setSharedFontFace(
+                            family: cur.family, weight: cur.weight, design: newDesign)
+                    })
+            ) {
+                ForEach(Array(ThemeFont.Design.allCases), id: \.self) { d in
+                    Text(d.rawValue).tag(d)
+                }
+            }
+        }
+        Section("How sizes work") {
+            Text(
+                """
+                Each overlay keeps its own font *size* (set on the element's \
+                section in the sidebar) — only the typeface above is shared. \
+                Default sizes match nvim-style layouts: grid labels are 60pt, \
+                toast text is 13pt, register cards are 11pt, etc.
+                """
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 private struct ToastForm: View {
     @ObservedObject var state: NeoMouseState
     var body: some View {
@@ -509,7 +650,8 @@ private struct ToastForm: View {
             ColorPicker("Text", selection: state.binding(\.toast.textColor).asSwiftUIColor(), supportsOpacity: true)
         }
         Section("Font") {
-            FontEditor(title: "Text font", font: state.binding(\.toast.textFont))
+            LabeledStepper(
+                "Text font size", value: state.binding(\.toast.textFont.size), range: 6...96)
         }
     }
 }
@@ -545,7 +687,8 @@ private struct KeyCastForm: View {
                 "Shadow", selection: state.binding(\.keyCast.shadowColor).asSwiftUIColor(), supportsOpacity: true)
         }
         Section("Font") {
-            FontEditor(title: "Text font", font: state.binding(\.keyCast.textFont))
+            LabeledStepper(
+                "Text font size", value: state.binding(\.keyCast.textFont.size), range: 6...96)
         }
     }
 }
@@ -565,11 +708,16 @@ private struct NumbersOverlayForm: View {
     var body: some View {
         Section("Gutter") {
             EnumPicker(title: "Direction", selection: state.binding(\.numbersOverlay.direction))
-            HStack {
-                LabeledStepper("Gutter width", value: state.binding(\.numbersOverlay.gutterWidth), range: 10...80)
-                LabeledStepper(
-                    "Column strip height", value: state.binding(\.numbersOverlay.columnStripHeight), range: 10...80)
-            }
+            LabeledStepper(
+                "Gutter width", value: state.binding(\.numbersOverlay.gutterWidth), range: 10...80)
+        }
+        Section("Column strip") {
+            EnumPicker(
+                title: "Direction",
+                selection: state.binding(\.numbersOverlay.columnStripDirection))
+            LabeledStepper(
+                "Column strip height", value: state.binding(\.numbersOverlay.columnStripHeight),
+                range: 10...80)
         }
         Section("Colors") {
             ColorPicker(
@@ -589,7 +737,8 @@ private struct NumbersOverlayForm: View {
                 supportsOpacity: true)
         }
         Section("Font") {
-            FontEditor(title: "Number font", font: state.binding(\.numbersOverlay.font))
+            LabeledStepper(
+                "Number font size", value: state.binding(\.numbersOverlay.font.size), range: 6...96)
         }
     }
 }
@@ -613,9 +762,14 @@ private struct GridForm: View {
                 "Inner label", selection: state.binding(\.grid.innerLabelColor).asSwiftUIColor(), supportsOpacity: true)
         }
         Section("Fonts") {
-            FontEditor(title: "Outer label font", font: state.binding(\.grid.outerLabelFont))
-            FontEditor(title: "Inner label font", font: state.binding(\.grid.innerLabelFont))
-            FontEditor(title: "Cursor-surrounded label font", font: state.binding(\.grid.cursorSurroundedLabelFont))
+            LabeledStepper(
+                "Outer label font size", value: state.binding(\.grid.outerLabelFont.size), range: 6...96)
+            LabeledStepper(
+                "Inner label font size", value: state.binding(\.grid.innerLabelFont.size), range: 6...96)
+            LabeledStepper(
+                "Cursor-surrounded label font size",
+                value: state.binding(\.grid.cursorSurroundedLabelFont.size),
+                range: 6...96)
         }
         Section("Cursor-surrounded grid (special-find)") {
             HStack {
@@ -656,8 +810,10 @@ private struct CommandLineForm: View {
                 supportsOpacity: true)
         }
         Section("Fonts") {
-            FontEditor(title: "Text font", font: state.binding(\.commandLine.textFont))
-            FontEditor(title: "Suggestion font", font: state.binding(\.commandLine.suggestionFont))
+            LabeledStepper(
+                "Text font size", value: state.binding(\.commandLine.textFont.size), range: 6...96)
+            LabeledStepper(
+                "Suggestion font size", value: state.binding(\.commandLine.suggestionFont.size), range: 6...96)
         }
     }
 }
@@ -681,8 +837,10 @@ private struct HelpDialogForm: View {
                 supportsOpacity: true)
         }
         Section("Fonts") {
-            FontEditor(title: "Header font", font: state.binding(\.helpDialog.headerFont))
-            FontEditor(title: "Keybind font", font: state.binding(\.helpDialog.keybindFont))
+            LabeledStepper(
+                "Header font size", value: state.binding(\.helpDialog.headerFont.size), range: 6...96)
+            LabeledStepper(
+                "Keybind font size", value: state.binding(\.helpDialog.keybindFont.size), range: 6...96)
         }
     }
 }
@@ -711,10 +869,14 @@ private struct MarksMenuForm: View {
                 supportsOpacity: true)
         }
         Section("Fonts") {
-            FontEditor(title: "Header", font: state.binding(\.marksMenu.headerFont))
-            FontEditor(title: "Mark label", font: state.binding(\.marksMenu.markLabelFont))
-            FontEditor(title: "Cell", font: state.binding(\.marksMenu.cellFont))
-            FontEditor(title: "Empty message", font: state.binding(\.marksMenu.emptyMessageFont))
+            LabeledStepper(
+                "Header size", value: state.binding(\.marksMenu.headerFont.size), range: 6...96)
+            LabeledStepper(
+                "Mark label size", value: state.binding(\.marksMenu.markLabelFont.size), range: 6...96)
+            LabeledStepper(
+                "Cell size", value: state.binding(\.marksMenu.cellFont.size), range: 6...96)
+            LabeledStepper(
+                "Empty message size", value: state.binding(\.marksMenu.emptyMessageFont.size), range: 6...96)
         }
     }
 }
@@ -765,11 +927,16 @@ private struct RegisterMenuForm: View {
                 supportsOpacity: true)
         }
         Section("Fonts") {
-            FontEditor(title: "Search", font: state.binding(\.registerMenu.searchFont))
-            FontEditor(title: "App name", font: state.binding(\.registerMenu.appNameFont))
-            FontEditor(title: "Register label", font: state.binding(\.registerMenu.registerLabelFont))
-            FontEditor(title: "Card text", font: state.binding(\.registerMenu.cardTextFont))
-            FontEditor(title: "Badge", font: state.binding(\.registerMenu.badgeFont))
+            LabeledStepper(
+                "Search size", value: state.binding(\.registerMenu.searchFont.size), range: 6...96)
+            LabeledStepper(
+                "App name size", value: state.binding(\.registerMenu.appNameFont.size), range: 6...96)
+            LabeledStepper(
+                "Register label size", value: state.binding(\.registerMenu.registerLabelFont.size), range: 6...96)
+            LabeledStepper(
+                "Card text size", value: state.binding(\.registerMenu.cardTextFont.size), range: 6...96)
+            LabeledStepper(
+                "Badge size", value: state.binding(\.registerMenu.badgeFont.size), range: 6...96)
         }
     }
 }

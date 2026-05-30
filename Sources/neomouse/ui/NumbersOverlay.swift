@@ -418,6 +418,16 @@ struct NumbersOverlayView: View {
             case .right: return inset + inner.width - gutterWidth
             }
         }()
+        // Column strip lives on top or bottom of the inset rect based on
+        // `theme.columnStripDirection`. .top → y: inset (original behavior).
+        // .bottom → y: inset + inner.height - columnStripHeight.
+        let columnStripHeight = CGFloat(theme.columnStripHeight)
+        let columnStripY: CGFloat = {
+            switch theme.columnStripDirection {
+            case .top: return inset
+            case .bottom: return inset + inner.height - columnStripHeight
+            }
+        }()
         ZStack(alignment: .topLeading) {
             // Highlight bands first → row gutter + column strip draw on top
             // so labels stay legible over the tint. Bands span the full
@@ -435,7 +445,7 @@ struct NumbersOverlayView: View {
                 rowGutter(totalHeight: inner.height)
                     .offset(x: gutterX, y: inset)
                 columnStrip(totalWidth: inner.width)
-                    .offset(x: inset, y: inset)
+                    .offset(x: inset, y: columnStripY)
             }
         }
         .frame(width: outer.width, height: outer.height, alignment: .topLeading)
