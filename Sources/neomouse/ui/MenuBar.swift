@@ -244,33 +244,18 @@ private struct MenuBarContent: View {
         CommandLine.shared.toggle()
     }
 
-    /// Mirror of `:restart` from CommandLine.swift. Spawns a detached
-    /// `swift run` from the package root, then exit(0) so the old tap
-    /// is gone before the new instance boots (see commit on event-tap
-    /// dupes from soft-quit for the full reasoning).
+    /// Mirror of `:restart` from CommandLine.swift. Delegates the actual
+    /// relaunch logic to `System.restart()` — that helper picks `open` for
+    /// bundled .apps and `swift run` for bare-binary dev launches, so this
+    /// works under brew/nix/manual install + `just release-test` as well as
+    /// `swift run` from the repo.
     private func restart() {
-        guard let executablePath = Bundle.main.executablePath else {
-            return ToastManager.shared.show("restart: no executable path")
-        }
-        var root = URL(fileURLWithPath: executablePath).deletingLastPathComponent()
-        while root.path != "/"
-            && !FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("Package.swift").path)
-        {
-            root = root.deletingLastPathComponent()
-        }
-        guard root.path != "/" else {
-            return ToastManager.shared.show("restart: could not locate Package.swift")
-        }
-        let task = Process()
-        task.launchPath = "/bin/sh"
-        task.arguments = ["-c", "sleep 0.5 && cd \"$1\" && swift run", "sh", root.path]
-        do {
-            try task.run()
-        } catch {
-            return ToastManager.shared.show("restart: failed to spawn — \(error)")
+        if let err = System.restart() {
+            return ToastManager.shared.show("restart: \(err)")
         }
         ToastManager.shared.show("Restarting…")
+        // Defer the exit so the toast renders and SwiftUI returns to its
+        // run loop before we yank the process out from under AppKit.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             // Release any held synthesized mouse button so a restart from
             // visual mode doesn't leave the user mid-drag.

@@ -91,6 +91,51 @@ init:
 release-local version="v0.0.0-local":
     @DRY_RUN=1 scripts/release.sh {{version}}
 
+# Build the local-release tarball, then install it to
+# `/Applications/NeoMouseTest.app` with a rewritten bundle identity so TCC
+# grants (Accessibility, Input Monitoring) survive across rebuilds.
+#
+# Why: extracting the release tarball under `/tmp/` gives each rebuild a
+# fresh binary path, which TCC treats as a new app — grants don't persist
+# and macOS sometimes refuses to add `/tmp/` apps via System Settings →
+# Privacy → Input Monitoring → "+". `/Applications/` is stable, so granting
+# Accessibility + Input Monitoring once carries across every subsequent
+# `just release-test`.
+#
+# Bundle identity is rewritten:
+#   CFBundleIdentifier:  com.kangazero.NeoMouseTest  (≠ production)
+#   CFBundleName / DisplayName: NeoMouseTest         (≠ "NeoMouse")
+# so TCC tracks this separately from a future production NeoMouse install.
+# Re-signs after the plist edit (--deep, ad-hoc) and clears quarantine.
+#
+# After the first launch, grant once:
+#   System Settings → Privacy & Security → Accessibility    → enable NeoMouseTest
+#   System Settings → Privacy & Security → Input Monitoring → enable NeoMouseTest
+# Subsequent runs of this recipe replace the bundle in place; TCC keeps both grants.
+release-test: release-local
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Stop any running NeoMouseTest so we can replace the bundle in /Applications.
+    pkill -f "NeoMouseTest.app/Contents/MacOS/neomouse" 2>/dev/null || true
+    sleep 0.5
+    rm -rf /Applications/NeoMouseTest.app
+    STAGE=$(mktemp -d)
+    tar -xzf dist/neomouse-v0.0.0-local-macos-arm64.tar.gz -C "$STAGE"
+    mv "$STAGE/neomouse.app" /Applications/NeoMouseTest.app
+    rm -rf "$STAGE"
+    # Rewrite identity in the installed Info.plist. plutil edits invalidate
+    # the existing signature, so re-sign afterwards.
+    plutil -replace CFBundleIdentifier  -string "com.kangazero.NeoMouseTest" /Applications/NeoMouseTest.app/Contents/Info.plist
+    plutil -replace CFBundleName        -string "NeoMouseTest"               /Applications/NeoMouseTest.app/Contents/Info.plist
+    plutil -replace CFBundleDisplayName -string "NeoMouseTest"               /Applications/NeoMouseTest.app/Contents/Info.plist
+    codesign --sign - --force --options runtime --timestamp=none --deep /Applications/NeoMouseTest.app
+    xattr -dr com.apple.quarantine /Applications/NeoMouseTest.app 2>/dev/null || true
+    echo
+    echo "Installed /Applications/NeoMouseTest.app — launching"
+    echo "First-run TCC: System Settings → Privacy & Security → Accessibility + Input Monitoring → enable NeoMouseTest"
+    echo
+    open /Applications/NeoMouseTest.app
+
 # Lint + test + config schema check — what the pre-commit hook runs
 check: lint test check-config
 

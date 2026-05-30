@@ -167,38 +167,17 @@ final class CommandLine {
             RegisterMenu.shared.toggle()
             return
         case .restart, .r:
-            // Relaunch via SwiftPM in dev. We can't exec-in-place because
-            // `swift run` does a build step first — so spawn a detached
-            // /bin/sh child that sleeps just long enough for *this* process to
-            // exit cleanly (pasteboard timer, event tap, etc.), then `cd`s into
-            // the package root and runs `swift run`. Argv-passed root (`$1`)
-            // rather than string-interpolated so paths with spaces don't break
-            // the script. macOS reparents the orphaned shell to launchd, so it
-            // survives our NSApp.terminate. Accessibility permission carries
-            // across the restart because the rebuilt binary keeps the same
-            // .build path.
-            guard let executablePath = Bundle.main.executablePath else {
-                return ToastManager.shared.show("restart: Bundle.main.executablePath is nil")
-            }
-            var root = URL(fileURLWithPath: executablePath).deletingLastPathComponent()
-            while root.path != "/"
-                && !FileManager.default.fileExists(
-                    atPath: root.appendingPathComponent("Package.swift").path)
-            {
-                root = root.deletingLastPathComponent()
-            }
-            guard root.path != "/" else {
-                return ToastManager.shared.show("restart: could not locate Package.swift")
-            }
-            let task = Process()
-            task.launchPath = "/bin/sh"
-            task.arguments = [
-                "-c", "sleep 0.5 && cd \"$1\" && swift run", "sh", root.path,
-            ]
-            do {
-                try task.run()
-            } catch {
-                return ToastManager.shared.show("restart: failed to spawn — \(error)")
+            // Detached relaunch via System.restart() — picks `open` for
+            // bundled .apps (brew / nix / manual / `just release-test`) or
+            // `swift run` from the package root for bare-binary `swift run`
+            // dev launches. We can't exec-in-place because `swift run` does a
+            // build step first, and `open` is detached anyway; spawning a
+            // shell child that sleeps just long enough for *this* process to
+            // exit cleanly (pasteboard timer, event tap, etc.) before
+            // relaunching gives both paths a clean handoff. TCC permissions
+            // carry across because the relaunched binary keeps the same path.
+            if let err = System.restart() {
+                return ToastManager.shared.show("restart: \(err)")
             }
             ToastManager.shared.show("Restarting…")
             // Defer the exit so the toast renders and the executor returns
@@ -217,7 +196,7 @@ final class CommandLine {
                 // exit(0) instead of NSApp.terminate(nil) because terminate
                 // routes through applicationShouldTerminate → applicationWill
                 // Terminate, and any in-flight Task / Timer / runloop source
-                // can stall that path long enough for the spawned `swift run`
+                // can stall that path long enough for the spawned successor
                 // to bring up the new process alongside the still-dying old
                 // one — net result is two CGEventTaps catching every keystroke
                 // and every keyDown firing twice. exit(0) skips the AppKit
