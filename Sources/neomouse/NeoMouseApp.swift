@@ -269,7 +269,18 @@ struct NeoMouse: App {
                 } else {
                     operationCount = 1
                 }
-                let _key = charToKeyCodeMap.first(where: { $0.value == event.keyCode })?.key ?? "?"
+                // Layout-independent ASCII characters for keybind matching, so
+                // Vim motions resolve while the user is on Cyrillic / Greek /
+                // Pinyin / Hangul / etc. `asciiKey` mirrors NSEvent.characters
+                // (shift+option applied); `asciiKeyBase` mirrors
+                // NSEvent.charactersIgnoringModifiers (only shift respected).
+                // User-supplied data (mark/register names, free-form text
+                // typed in menus) intentionally keeps reading
+                // `event.characters` so users can name things in their native
+                // script.
+                let asciiKey = asciiChar(forEvent: event)
+                let asciiKeyBase = asciiCharIgnoringModifiers(forEvent: event)
+                let _key = charToKeyCodeMap.keyChar(forKeyCode: event.keyCode) ?? "?"
                 debug(
                     """
                     [keyDown]
@@ -284,8 +295,7 @@ struct NeoMouse: App {
                       operationCount = \(operationCount)
                     """
                 )
-                if event.characters == "e" && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
-                {
+                if asciiKey == "e" && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
                     debug("appState = \(appState.mode)")
                     if case .disabled = appState.mode {
                         appState.mode = .normal(
@@ -346,7 +356,7 @@ struct NeoMouse: App {
                     }
                     //Only allow count input in these conditions
                     if currentPendingNormalOperation == .none || currentPendingNormalOperation == .special {
-                        switch event.characters {
+                        switch asciiKey {
                         //TODO change to current focused app and add in for g0
                         case "0":
                             guard event.modifierFlags.rawValue == 256 else {
@@ -364,7 +374,7 @@ struct NeoMouse: App {
                             else {
                                 appState.mode = .normal(
                                     currentPendingOperation: currentPendingNormalOperation,
-                                    operationCountAsString: (operationCountAsString ?? "") + event.characters!
+                                    operationCountAsString: (operationCountAsString ?? "") + (asciiKey ?? "")
                                 )
                                 return
                             }
@@ -374,23 +384,22 @@ struct NeoMouse: App {
                             Mouse.moveToScreenLocal(x: target.x, y: target.y)
                             return
                         case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-                            guard event.modifierFlags.rawValue == 256, event.characters?.count == 1 else {
+                            guard event.modifierFlags.rawValue == 256, asciiKey?.count == 1 else {
                                 return appState.mode = .normal(
                                     currentPendingOperation: .none,
                                     operationCountAsString: nil
                                 )
                             }
-                            // appState.operationCountAsString = (appState.operationCountAsString ?? "") + event.characters!
                             appState.mode = .normal(
                                 currentPendingOperation: currentPendingNormalOperation,
-                                operationCountAsString: (operationCountAsString ?? "") + event.characters!)
+                                operationCountAsString: (operationCountAsString ?? "") + (asciiKey ?? ""))
                             return
                         default: break
                         }
                     }
                     switch currentPendingNormalOperation {
                     case .special:
-                        switch event.characters {
+                        switch asciiKey {
                         case "d", "D":
                             guard
                                 event.modifierFlags.rawValue == 256
@@ -475,8 +484,7 @@ struct NeoMouse: App {
                             break
                         }
                     case .g:
-                        //TODO consider switching to charactersIgnoringModifiers
-                        switch event.characters {
+                        switch asciiKey {
                         case "g":
                             guard event.modifierFlags.rawValue == 256 else {
                                 return debug("gg contains a modifier, ignoring")
@@ -555,8 +563,7 @@ struct NeoMouse: App {
                         }
                         break
                     case .gg:
-                        //TODO consider switching to charactersIgnoringModifiers
-                        switch (event.characters, appState.isVisual) {
+                        switch (asciiKey, appState.isVisual) {
                         case ("y", false):
                             guard event.modifierFlags.rawValue == 256 else {
                                 return
@@ -580,9 +587,9 @@ struct NeoMouse: App {
                             )
                             return
                         case ("\"", false):
-                            guard event.charactersIgnoringModifiers == "\"" else {
+                            guard asciiKeyBase == "\"" else {
                                 debug(
-                                    "Expected '\"' for register operations, got \(String(describing: event.charactersIgnoringModifiers))"
+                                    "Expected '\"' for register operations, got \(String(describing: asciiKeyBase))"
                                 )
                                 return appState.mode = .normal(
                                     currentPendingOperation: .none,
@@ -600,7 +607,7 @@ struct NeoMouse: App {
                         break
                     case .ggy:
                         guard
-                            event.characters == "G"
+                            asciiKey == "G"
                         else {
                             // go to .normal switch statement
                             break
@@ -651,7 +658,7 @@ struct NeoMouse: App {
                         return
                     case .ggv:
                         guard
-                            event.characters == "G"
+                            asciiKey == "G"
                         else {
                             // go to .normal switch statement
                             break
@@ -683,7 +690,7 @@ struct NeoMouse: App {
                         )
                         return
                     case .window:
-                        switch event.charactersIgnoringModifiers {
+                        switch asciiKeyBase {
                         case "w", "W":
                             guard
                                 event.modifierFlags.rawValue == 256
@@ -711,7 +718,7 @@ struct NeoMouse: App {
                                     ])
                             else {
                                 debug(
-                                    "Special-w-\(event.charactersIgnoringModifiers ?? "?") contains an unexpected modifier"
+                                    "Special-w-\(asciiKeyBase ?? "?") contains an unexpected modifier"
                                 )
                                 return appState.mode = .normal(
                                     currentPendingOperation: .none,
@@ -719,13 +726,13 @@ struct NeoMouse: App {
                                 )
                             }
                             let direction: NeomouseType.Direction
-                            switch event.charactersIgnoringModifiers {
+                            switch asciiKeyBase {
                             case "h": direction = .left
                             case "j": direction = .down
                             case "k": direction = .up
                             case "l": direction = .right
                             default:
-                                debug("Unexpected character for Special-w-\(event.charactersIgnoringModifiers ?? "?")")
+                                debug("Unexpected character for Special-w-\(asciiKeyBase ?? "?")")
                                 return appState.mode = .normal(
                                     currentPendingOperation: .none,
                                     operationCountAsString: nil
@@ -733,7 +740,7 @@ struct NeoMouse: App {
                             }
                             guard let nextScreenRect = Screen.adjacentDisplayRectByDirection(at: direction) else {
                                 debug(
-                                    "No adjacent screen found in direction \(direction) for Special-w-\(event.charactersIgnoringModifiers ?? "?")"
+                                    "No adjacent screen found in direction \(direction) for Special-w-\(asciiKeyBase ?? "?")"
                                 )
                                 return appState.mode = .normal(
                                     currentPendingOperation: .none,
@@ -855,8 +862,7 @@ struct NeoMouse: App {
                             debug("registerAction register contains a non-shift modifier or no activeRegister")
                             return
                         }
-                        //TODO consider switching to charactersIgnoringModifiers
-                        switch event.characters {
+                        switch asciiKey {
                         case "y", "Y":
                             if appState.isVisual {
                                 CoreOperations.normalYank(
@@ -866,10 +872,10 @@ struct NeoMouse: App {
                                     activeRegister: activeRegister)
                             } else {
                                 debug(
-                                    "event char charactersIgnoringModifiers = \(String(describing: event.charactersIgnoringModifiers))"
+                                    "event char charactersIgnoringModifiers = \(String(describing: asciiKeyBase))"
                                 )
                                 //This allows the display to be screenshot with ggyG or "[register]yG or gg"[register]yG
-                                if event.charactersIgnoringModifiers == "y" {
+                                if asciiKeyBase == "y" {
                                     appState.mode = .normal(currentPendingOperation: .ggy, operationCountAsString: nil)
                                     appState.pendingRegisterCharacter = activeRegister
                                     return
@@ -927,8 +933,7 @@ struct NeoMouse: App {
                         //INFO: Return early here to avoid the mark char being processed by the normal flow below, which could cause unintended behavior (eg.. "mm" would trigger both the mark setting and the "go to start of line" behavior)
                         return
                     }
-                    //TODO consider switching to charactersIgnoringModifiers
-                    switch event.characters {
+                    switch asciiKey {
                     case " ":
                         guard
                             event.modifierFlags.rawValue == 256
@@ -1003,7 +1008,7 @@ struct NeoMouse: App {
                         // and the cases become Void, which is what made `nil`
                         // unassignable in the earlier version.
                         let pendingDirection: NeomouseType.Direction? =
-                            switch event.characters {
+                            switch asciiKey {
                             case "H": .right  // swapped to match the intuitive direction of the scroll
                             case "J": .down
                             case "K": .up
@@ -1037,7 +1042,7 @@ struct NeoMouse: App {
                     case "h", "j", "k", "l":
                         guard
                             event.modifierFlags.rawValue == 256,
-                            let key = event.characters,
+                            let key = asciiKey,
                             let direction = HJKLDirection(key)
                         else {
                             return appState.mode = .normal(
@@ -1095,9 +1100,9 @@ struct NeoMouse: App {
                         )
                         break
                     case "\"":
-                        guard event.charactersIgnoringModifiers == "\"" else {
+                        guard asciiKeyBase == "\"" else {
                             debug(
-                                "Expected '\"' for register operations, got \(String(describing: event.charactersIgnoringModifiers))"
+                                "Expected '\"' for register operations, got \(String(describing: asciiKeyBase))"
                             )
                             return appState.mode = .normal(
                                 currentPendingOperation: .none,
@@ -1110,9 +1115,9 @@ struct NeoMouse: App {
                         )
                         break
                     case "?":
-                        guard event.charactersIgnoringModifiers == "?" else {
+                        guard asciiKeyBase == "?" else {
                             debug(
-                                "Expected '?' for help, got \(String(describing: event.charactersIgnoringModifiers))"
+                                "Expected '?' for help, got \(String(describing: asciiKeyBase))"
                             )
                             return appState.mode = .normal(
                                 currentPendingOperation: .none,
@@ -1123,9 +1128,9 @@ struct NeoMouse: App {
                         appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                         break
                     case ":":
-                        guard event.charactersIgnoringModifiers == ":" else {
+                        guard asciiKeyBase == ":" else {
                             debug(
-                                "Expected ':' for command line, got \(String(describing: event.charactersIgnoringModifiers))"
+                                "Expected ':' for command line, got \(String(describing: asciiKeyBase))"
                             )
                             return appState.mode = .normal(
                                 currentPendingOperation: .none,
@@ -1469,8 +1474,7 @@ struct NeoMouse: App {
                         break
                     default: break
                     }
-                    //TODO consider switching to charactersIgnoringModifiers
-                    switch event.characters {
+                    switch asciiKey {
                     case "e":
                         guard
                             event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -1495,7 +1499,11 @@ struct NeoMouse: App {
                     // cycle.
                     //TODO move to neomouseUtils
                     func appendCharacterToCommand() {
-                        guard let character = event.characters else { return }
+                        // ASCII-canonical so :commands resolve on Cyrillic /
+                        // Greek / IME layouts. Users who actually want to type
+                        // non-ASCII content into the command line aren't a
+                        // case we support today (commands are English-only).
+                        guard let character = asciiKey else { return }
                         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                         guard !mods.contains(.command),
                             !mods.contains(.control),
@@ -1554,7 +1562,7 @@ struct NeoMouse: App {
                     default:
                         break
                     }
-                    switch event.charactersIgnoringModifiers {
+                    switch asciiKeyBase {
                     //Same fn as Tab
                     case "n", "N":
                         guard
@@ -1681,10 +1689,7 @@ struct NeoMouse: App {
                         event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                             .isSubset(of: [.shift, .capsLock])
                     else { break }
-                    guard
-                        let keyChar = charToKeyCodeMap.first(where: { $0.value == event.keyCode })?
-                            .key
-                    else {
+                    guard let keyChar = charToKeyCodeMap.keyChar(forKeyCode: event.keyCode) else {
                         debug(".specialFind: no charToKeyCodeMap entry for keyCode \(event.keyCode)")
                         return
                     }
@@ -1807,9 +1812,7 @@ struct NeoMouse: App {
             return
         }
         //First get the convert of the keyCode to its equivalent character (as String)
-        let keyCodeAsChar: String? = charToKeyCodeMap.first(where: {
-            $0.value == event.keyCode
-        })?.key
+        let keyCodeAsChar: String? = charToKeyCodeMap.keyChar(forKeyCode: event.keyCode)
         // debug(
         //     "executeFindModeOperation: keyCode: \(event.keyCode), keyCodeAsChar: \(keyCodeAsChar)")
         guard let keyCodeAsChar = keyCodeAsChar else {

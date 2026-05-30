@@ -22,6 +22,16 @@ extension NeoMouse {
         let state = NeoMouse.sharedState
         let keyMask: CGEventMask = 1 << CGEventType.keyDown.rawValue
 
+        // Ask TCC for Accessibility up-front. With prompt=true, macOS shows its
+        // native "Open System Settings" dialog if we're not already trusted —
+        // tapCreate would otherwise just return nil with no user-visible cue.
+        // Hard-coded key string (== kAXTrustedCheckOptionPrompt) to dodge the
+        // Swift 6 concurrency check on the imported CFStringRef global.
+        let axOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        if !AXIsProcessTrustedWithOptions(axOptions) {
+            debug("Accessibility not granted — system prompt shown; tap install will likely fail this run")
+        }
+
         if state.isDisableKeyInput {
             debug("isDisableKeyInput is true - applying CGEvent tap that swallows most regular key events (a-z0-9)")
             NeoMouse.keyEventTap = CGEvent.tapCreate(
