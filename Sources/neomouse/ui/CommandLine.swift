@@ -332,8 +332,8 @@ final class CommandLine {
         let origin = theme.anchor.origin(
             in: currentScreen.visibleFrame,
             panelSize: panelSize,
-            offsetX: theme.offsetX,
-            offsetY: theme.offsetY
+            offsetX: theme.xOffset,
+            offsetY: theme.yOffset
         )
         panel.setFrameOrigin(origin)
 

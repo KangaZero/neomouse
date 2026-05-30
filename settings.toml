@@ -56,49 +56,145 @@ mode_on_start = "normal"
 # ---------------------------------------------------------------------------
 # [theme.*] — per-element visual overrides
 # ---------------------------------------------------------------------------
-# Every sub-section is optional; missing keys keep the built-in defaults.
-# Colors are hex strings: "#rgb", "#rgba", "#rrggbb", "#rrggbbaa" (the # is
-# optional). Fonts take `family` (empty = system), `size`, `weight`
-# (ultra_light..black) and `design` (default | monospaced | serif | rounded).
-# Anchors are one of: top | top_left | top_right | center | center_left |
-# center_right | bottom | bottom_left | bottom_right.
-# Materials are: ultra_thin | thin | regular | thick | ultra_thick | bar | hud.
+# Every key below is at its built-in default. Remove or comment out any line
+# you don't want to override; the runtime falls back to the same value the
+# struct supplies. Whole sub-sections are optional too — drop a section
+# entirely and that element uses defaults.
 #
-# See schema/settings.schema.json for the full list of knobs per element —
-# what's below is a starting taste, not the complete menu.
+# Colors:    "#rgb", "#rgba", "#rrggbb", "#rrggbbaa". Leading # is optional.
+# Fonts:     { family = "", size = N, weight = "...", design = "..." }
+#              family = "" → system font (recommended).
+#              weight: ultra_light, thin, light, regular, medium, semibold,
+#                      bold, heavy, black.
+#              design: default, monospaced, serif, rounded.
+# Anchors:   top, top_left, top_right, center, center_left, center_right,
+#            bottom, bottom_left, bottom_right. Combine with x_offset /
+#            y_offset (in points) to push inward from the anchor edge.
+# Materials: ultra_thin, thin, regular, thick, ultra_thick, bar, hud.
 
+# Find-mode big-grid AND special-find dense-grid around the cursor share
+# this section (per design — same color/font palette for both). The
+# cursor_surrounded_* keys only affect the dense grid.
+[theme.grid]
+background              = "#00000026"  # 0.15 black overlay tint
+outer_line_color        = "#ffffff99"  # 0.6 white
+outer_label_color       = "#007aff"    # SwiftUI accent blue
+outer_label_font        = { family = "", size = 60, weight = "bold", design = "default" }
+inner_line_color        = "#ffffff99"
+inner_faint_line_color  = "#ffffff4d"  # 0.3 white — non-focused cell grid
+inner_label_color       = "#ffffff"
+inner_label_font        = { family = "", size = 12, weight = "regular", design = "default" }
+cursor_surrounded_box_size    = 200
+cursor_surrounded_divisions   = 6
+cursor_surrounded_label_font  = { family = "", size = 14, weight = "semibold", design = "monospaced" }
+
+# Ruler / line-number gutter that follows the cursor in find/normal modes.
+# `direction` flips the gutter to the right edge — useful when a dock or
+# window-manager strip competes with the default left edge.
 [theme.numbers_overlay]
-# Render the line-number gutter on the right edge of the screen instead of
-# the default left. Useful when a left-side dock or window manager strip
-# competes with the gutter for screen edge real estate.
-direction = "left"
+direction               = "left"        # "left" | "right"
+gutter_background       = "#0000008c"  # 0.55 black
+cursor_line_highlight   = "#ffff002e"  # 0.18 yellow
+cursor_column_highlight = "#ffff002e"
+cursor_text_color       = "#ffff00"
+text_color              = "#ffffffbf"  # 0.75 white
+font                    = { family = "", size = 12, weight = "regular", design = "monospaced" }
+gutter_width            = 20
+column_strip_height     = 20
+
+[theme.command_line]
+anchor                 = "bottom"
+x_offset               = 0
+y_offset               = 100
+width                  = 420
+height                 = 60
+corner_radius          = 8
+text_font              = { family = "", size = 13, weight = "regular", design = "monospaced" }
+text_color             = "#e6e6e6"    # 0.9 white
+prefix_color           = "#999999"    # 0.6 white — the leading ":" colon
+suggestion_font        = { family = "", size = 13, weight = "regular", design = "monospaced" }
+suggestion_text_color  = "#e6e6e6"
+suggestion_highlight   = "#007aff59"  # accent blue @ 0.35 — highlighted wildmenu row
+material               = "regular"
+
+[theme.marks_menu]
+anchor                   = "center"
+width                    = 500
+height                   = 500
+corner_radius            = 8
+material                 = "ultra_thin"
+header_font              = { family = "", size = 11, weight = "semibold", design = "default" }
+mark_label_font          = { family = "", size = 12, weight = "medium", design = "monospaced" }
+cell_font                = { family = "", size = 12, weight = "regular", design = "monospaced" }
+empty_message_font       = { family = "", size = 12, weight = "regular", design = "default" }
+selected_row_background  = "#007aff59"  # accent blue @ 0.35
+row_padding_x            = 12
+row_padding_y            = 4
+
+[theme.register_menu]
+anchor                     = "center"
+width                      = 920
+height                     = 380
+corner_radius              = 12
+material                   = "ultra_thin"
+card_width                 = 220
+card_height                = 280
+card_padding_x             = 4
+card_padding_y             = 4
+view_padding               = 12
+search_font                = { family = "", size = 13, weight = "regular", design = "default" }
+app_name_font              = { family = "", size = 11, weight = "medium",  design = "default" }
+register_label_font        = { family = "", size = 12, weight = "bold",    design = "monospaced" }
+card_text_font             = { family = "", size = 11, weight = "regular", design = "monospaced" }
+badge_font                 = { family = "", size = 11, weight = "regular", design = "monospaced" }
+register_badge_background  = "#007aff59"  # accent blue @ 0.35
+selected_card_border       = "#007aff"
+unselected_card_border     = "#ffffff14"  # 0.08 white
+card_shadow_selected       = "#00000059"  # 0.35 black
+card_shadow_unselected     = "#00000026"  # 0.15 black
+content_background         = "#00000014"  # 0.08 black
+
+[theme.help_dialog]
+anchor             = "center"
+width              = 700
+height             = 850
+padding            = 20
+header_color       = "#007aff"
+header_font        = { family = "", size = 17, weight = "semibold", design = "default" }
+keybind_font       = { family = "", size = 13, weight = "regular",  design = "monospaced" }
+description_color  = "#999999"
+
+[theme.visual_highlight]
+fill = "#007aff4d"  # accent blue @ 0.3 — the selection rectangle tint
 
 [theme.toast]
-# Top-right corner of the active screen, inset by 20pt on each axis.
-anchor = "top_right"
-offset_x = 20
-offset_y = 20
+anchor          = "top_right"
+x_offset        = 20
+y_offset        = 20
+width           = 300
+height          = 60
+corner_radius   = 12
+padding_x       = 16
+padding_y       = 12
+outer_padding   = 10
+background      = "#000000d9"  # 0.85 black
+text_color      = "#ffffff"
+text_font       = { family = "", size = 13, weight = "medium", design = "default" }
 
-# [theme.command_line]
-# anchor = "bottom"
-# offset_y = 100
-# width = 420
-
-# [theme.grid]
-# background = "#000000bb"
-# outer_label_color = "#00bfff"
-# outer_label_font = { size = 72, weight = "bold" }
-# inner_label_color = "#ffffff"
-
-# [theme.visual_highlight]
-# fill = "#007aff4d"   # accent blue at 30% alpha
-
-# [theme.key_cast]
-# anchor = "top"
-# offset_y = 12
-# background = "#000000"
-# text_color = "#ffffff"
-# text_font = { size = 24, weight = "bold", design = "monospaced" }
+[theme.key_cast]
+anchor         = "top"
+x_offset       = 0
+y_offset       = 12
+width          = 240
+height         = 48
+corner_radius  = 10
+padding_x      = 18
+padding_y      = 10
+background     = "#000000"
+text_color     = "#ffffff"
+border_color   = "#ffffff2e"  # 0.18 white
+shadow_color   = "#0000008c"  # 0.55 black
+text_font      = { family = "", size = 24, weight = "bold", design = "monospaced" }
 #
 # [keymap]
 # # Motion keys. "modifier + key(s)" 

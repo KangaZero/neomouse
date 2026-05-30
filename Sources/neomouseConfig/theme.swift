@@ -1,6 +1,25 @@
 import CoreGraphics
 import Foundation
 
+// TOMLDecoder doesn't auto-coerce between TOML's `Integer` and `Float`
+// scalars. A field declared `Double` in Swift errors out when the TOML
+// value is written as `width = 420` (integer) rather than `width = 420.0`
+// (float) — and the error it surfaces is the cryptic
+//   "Expected value of type OffsetDateTime but found null"
+// because the decoder's `decode(Double.self)` falls through to a datetime
+// branch when the float parse fails.
+//
+// `tomlDouble` accepts either form transparently. Use it instead of
+// `c.decodeIfPresent(Double.self, forKey: …) ?? default` for every Double
+// theme field so users can write whatever numeric literal feels natural.
+private func tomlDouble<K: CodingKey>(
+    _ c: KeyedDecodingContainer<K>, forKey key: K, default d: Double
+) throws -> Double {
+    guard c.contains(key) else { return d }
+    if let i = try? c.decode(Int.self, forKey: key) { return Double(i) }
+    return try c.decode(Double.self, forKey: key)
+}
+
 // User-overridable theme model for every neomouse UI element (except the
 // menu-bar status icon, which is intentionally tied to the mode/state
 // color scheme). Each subsection of `Config.Theme` maps to one TOML table
@@ -196,7 +215,7 @@ public struct ThemeFont: Decodable, Sendable, Equatable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         family = try c.decodeIfPresent(String.self, forKey: .family) ?? ""
-        size = try c.decodeIfPresent(Double.self, forKey: .size) ?? 13
+        size = try tomlDouble(c, forKey: .size, default: 13)
         weight = try c.decodeIfPresent(Weight.self, forKey: .weight) ?? .regular
         design = try c.decodeIfPresent(Design.self, forKey: .design) ?? .default
     }
@@ -315,8 +334,7 @@ public struct GridTheme: Decodable, Sendable {
         innerLabelFont =
             try c.decodeIfPresent(ThemeFont.self, forKey: .innerLabelFont) ?? d.innerLabelFont
         cursorSurroundedBoxSize =
-            try c.decodeIfPresent(Double.self, forKey: .cursorSurroundedBoxSize)
-            ?? d.cursorSurroundedBoxSize
+            try tomlDouble(c, forKey: .cursorSurroundedBoxSize, default: d.cursorSurroundedBoxSize)
         cursorSurroundedDivisions =
             try c.decodeIfPresent(Int.self, forKey: .cursorSurroundedDivisions)
             ?? d.cursorSurroundedDivisions
@@ -383,16 +401,16 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
             try c.decodeIfPresent(ThemeColor.self, forKey: .cursorTextColor) ?? d.cursorTextColor
         textColor = try c.decodeIfPresent(ThemeColor.self, forKey: .textColor) ?? d.textColor
         font = try c.decodeIfPresent(ThemeFont.self, forKey: .font) ?? d.font
-        gutterWidth = try c.decodeIfPresent(Double.self, forKey: .gutterWidth) ?? d.gutterWidth
+        gutterWidth = try tomlDouble(c, forKey: .gutterWidth, default: d.gutterWidth)
         columnStripHeight =
-            try c.decodeIfPresent(Double.self, forKey: .columnStripHeight) ?? d.columnStripHeight
+            try tomlDouble(c, forKey: .columnStripHeight, default: d.columnStripHeight)
     }
 }
 
 public struct CommandLineTheme: Decodable, Sendable {
     public let anchor: ThemeAnchor
-    public let offsetX: Double
-    public let offsetY: Double
+    public let xOffset: Double
+    public let yOffset: Double
     public let width: Double
     public let height: Double
     public let cornerRadius: Double
@@ -406,8 +424,8 @@ public struct CommandLineTheme: Decodable, Sendable {
 
     public init(
         anchor: ThemeAnchor = .bottom,
-        offsetX: Double = 0,
-        offsetY: Double = 100,
+        xOffset: Double = 0,
+        yOffset: Double = 100,
         width: Double = 420,
         height: Double = 60,
         cornerRadius: Double = 8,
@@ -420,8 +438,8 @@ public struct CommandLineTheme: Decodable, Sendable {
         material: ThemeMaterial = .regular
     ) {
         self.anchor = anchor
-        self.offsetX = offsetX
-        self.offsetY = offsetY
+        self.xOffset = xOffset
+        self.yOffset = yOffset
         self.width = width
         self.height = height
         self.cornerRadius = cornerRadius
@@ -435,7 +453,7 @@ public struct CommandLineTheme: Decodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case anchor, offsetX, offsetY, width, height, cornerRadius
+        case anchor, xOffset, yOffset, width, height, cornerRadius
         case textFont, textColor, prefixColor
         case suggestionFont, suggestionTextColor, suggestionHighlight, material
     }
@@ -444,11 +462,11 @@ public struct CommandLineTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = CommandLineTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
-        offsetX = try c.decodeIfPresent(Double.self, forKey: .offsetX) ?? d.offsetX
-        offsetY = try c.decodeIfPresent(Double.self, forKey: .offsetY) ?? d.offsetY
-        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? d.width
-        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? d.height
-        cornerRadius = try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius
+        xOffset = try tomlDouble(c, forKey: .xOffset, default: d.xOffset)
+        yOffset = try tomlDouble(c, forKey: .yOffset, default: d.yOffset)
+        width = try tomlDouble(c, forKey: .width, default: d.width)
+        height = try tomlDouble(c, forKey: .height, default: d.height)
+        cornerRadius = try tomlDouble(c, forKey: .cornerRadius, default: d.cornerRadius)
         textFont = try c.decodeIfPresent(ThemeFont.self, forKey: .textFont) ?? d.textFont
         textColor = try c.decodeIfPresent(ThemeColor.self, forKey: .textColor) ?? d.textColor
         prefixColor = try c.decodeIfPresent(ThemeColor.self, forKey: .prefixColor) ?? d.prefixColor
@@ -516,9 +534,9 @@ public struct MarksMenuTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = MarksMenuTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
-        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? d.width
-        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? d.height
-        cornerRadius = try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius
+        width = try tomlDouble(c, forKey: .width, default: d.width)
+        height = try tomlDouble(c, forKey: .height, default: d.height)
+        cornerRadius = try tomlDouble(c, forKey: .cornerRadius, default: d.cornerRadius)
         material = try c.decodeIfPresent(ThemeMaterial.self, forKey: .material) ?? d.material
         headerFont = try c.decodeIfPresent(ThemeFont.self, forKey: .headerFont) ?? d.headerFont
         markLabelFont =
@@ -529,8 +547,8 @@ public struct MarksMenuTheme: Decodable, Sendable {
         selectedRowBackground =
             try c.decodeIfPresent(ThemeColor.self, forKey: .selectedRowBackground)
             ?? d.selectedRowBackground
-        rowPaddingX = try c.decodeIfPresent(Double.self, forKey: .rowPaddingX) ?? d.rowPaddingX
-        rowPaddingY = try c.decodeIfPresent(Double.self, forKey: .rowPaddingY) ?? d.rowPaddingY
+        rowPaddingX = try tomlDouble(c, forKey: .rowPaddingX, default: d.rowPaddingX)
+        rowPaddingY = try tomlDouble(c, forKey: .rowPaddingY, default: d.rowPaddingY)
     }
 }
 
@@ -615,15 +633,15 @@ public struct RegisterMenuTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = RegisterMenuTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
-        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? d.width
-        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? d.height
-        cornerRadius = try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius
+        width = try tomlDouble(c, forKey: .width, default: d.width)
+        height = try tomlDouble(c, forKey: .height, default: d.height)
+        cornerRadius = try tomlDouble(c, forKey: .cornerRadius, default: d.cornerRadius)
         material = try c.decodeIfPresent(ThemeMaterial.self, forKey: .material) ?? d.material
-        cardWidth = try c.decodeIfPresent(Double.self, forKey: .cardWidth) ?? d.cardWidth
-        cardHeight = try c.decodeIfPresent(Double.self, forKey: .cardHeight) ?? d.cardHeight
-        cardPaddingX = try c.decodeIfPresent(Double.self, forKey: .cardPaddingX) ?? d.cardPaddingX
-        cardPaddingY = try c.decodeIfPresent(Double.self, forKey: .cardPaddingY) ?? d.cardPaddingY
-        viewPadding = try c.decodeIfPresent(Double.self, forKey: .viewPadding) ?? d.viewPadding
+        cardWidth = try tomlDouble(c, forKey: .cardWidth, default: d.cardWidth)
+        cardHeight = try tomlDouble(c, forKey: .cardHeight, default: d.cardHeight)
+        cardPaddingX = try tomlDouble(c, forKey: .cardPaddingX, default: d.cardPaddingX)
+        cardPaddingY = try tomlDouble(c, forKey: .cardPaddingY, default: d.cardPaddingY)
+        viewPadding = try tomlDouble(c, forKey: .viewPadding, default: d.viewPadding)
         searchFont = try c.decodeIfPresent(ThemeFont.self, forKey: .searchFont) ?? d.searchFont
         appNameFont = try c.decodeIfPresent(ThemeFont.self, forKey: .appNameFont) ?? d.appNameFont
         registerLabelFont =
@@ -690,9 +708,9 @@ public struct HelpDialogTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = HelpDialogTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
-        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? d.width
-        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? d.height
-        padding = try c.decodeIfPresent(Double.self, forKey: .padding) ?? d.padding
+        width = try tomlDouble(c, forKey: .width, default: d.width)
+        height = try tomlDouble(c, forKey: .height, default: d.height)
+        padding = try tomlDouble(c, forKey: .padding, default: d.padding)
         headerColor = try c.decodeIfPresent(ThemeColor.self, forKey: .headerColor) ?? d.headerColor
         headerFont = try c.decodeIfPresent(ThemeFont.self, forKey: .headerFont) ?? d.headerFont
         keybindFont = try c.decodeIfPresent(ThemeFont.self, forKey: .keybindFont) ?? d.keybindFont
@@ -721,8 +739,8 @@ public struct VisualHighlightTheme: Decodable, Sendable {
 
 public struct ToastTheme: Decodable, Sendable {
     public let anchor: ThemeAnchor
-    public let offsetX: Double
-    public let offsetY: Double
+    public let xOffset: Double
+    public let yOffset: Double
     public let width: Double
     public let height: Double
     public let cornerRadius: Double
@@ -735,8 +753,8 @@ public struct ToastTheme: Decodable, Sendable {
 
     public init(
         anchor: ThemeAnchor = .topRight,
-        offsetX: Double = 20,
-        offsetY: Double = 20,
+        xOffset: Double = 20,
+        yOffset: Double = 20,
         width: Double = 300,
         height: Double = 60,
         cornerRadius: Double = 12,
@@ -748,8 +766,8 @@ public struct ToastTheme: Decodable, Sendable {
         textFont: ThemeFont = .init(size: 13, weight: .medium)
     ) {
         self.anchor = anchor
-        self.offsetX = offsetX
-        self.offsetY = offsetY
+        self.xOffset = xOffset
+        self.yOffset = yOffset
         self.width = width
         self.height = height
         self.cornerRadius = cornerRadius
@@ -762,7 +780,7 @@ public struct ToastTheme: Decodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case anchor, offsetX, offsetY, width, height, cornerRadius
+        case anchor, xOffset, yOffset, width, height, cornerRadius
         case paddingX, paddingY, outerPadding
         case background, textColor, textFont
     }
@@ -771,15 +789,15 @@ public struct ToastTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = ToastTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
-        offsetX = try c.decodeIfPresent(Double.self, forKey: .offsetX) ?? d.offsetX
-        offsetY = try c.decodeIfPresent(Double.self, forKey: .offsetY) ?? d.offsetY
-        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? d.width
-        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? d.height
-        cornerRadius = try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius
-        paddingX = try c.decodeIfPresent(Double.self, forKey: .paddingX) ?? d.paddingX
-        paddingY = try c.decodeIfPresent(Double.self, forKey: .paddingY) ?? d.paddingY
+        xOffset = try tomlDouble(c, forKey: .xOffset, default: d.xOffset)
+        yOffset = try tomlDouble(c, forKey: .yOffset, default: d.yOffset)
+        width = try tomlDouble(c, forKey: .width, default: d.width)
+        height = try tomlDouble(c, forKey: .height, default: d.height)
+        cornerRadius = try tomlDouble(c, forKey: .cornerRadius, default: d.cornerRadius)
+        paddingX = try tomlDouble(c, forKey: .paddingX, default: d.paddingX)
+        paddingY = try tomlDouble(c, forKey: .paddingY, default: d.paddingY)
         outerPadding =
-            try c.decodeIfPresent(Double.self, forKey: .outerPadding) ?? d.outerPadding
+            try tomlDouble(c, forKey: .outerPadding, default: d.outerPadding)
         background = try c.decodeIfPresent(ThemeColor.self, forKey: .background) ?? d.background
         textColor = try c.decodeIfPresent(ThemeColor.self, forKey: .textColor) ?? d.textColor
         textFont = try c.decodeIfPresent(ThemeFont.self, forKey: .textFont) ?? d.textFont
@@ -788,8 +806,8 @@ public struct ToastTheme: Decodable, Sendable {
 
 public struct KeyCastTheme: Decodable, Sendable {
     public let anchor: ThemeAnchor
-    public let offsetX: Double
-    public let offsetY: Double
+    public let xOffset: Double
+    public let yOffset: Double
     public let width: Double
     public let height: Double
     public let cornerRadius: Double
@@ -803,8 +821,8 @@ public struct KeyCastTheme: Decodable, Sendable {
 
     public init(
         anchor: ThemeAnchor = .top,
-        offsetX: Double = 0,
-        offsetY: Double = 12,
+        xOffset: Double = 0,
+        yOffset: Double = 12,
         width: Double = 240,
         height: Double = 48,
         cornerRadius: Double = 10,
@@ -817,8 +835,8 @@ public struct KeyCastTheme: Decodable, Sendable {
         textFont: ThemeFont = .init(size: 24, weight: .bold, design: .monospaced)
     ) {
         self.anchor = anchor
-        self.offsetX = offsetX
-        self.offsetY = offsetY
+        self.xOffset = xOffset
+        self.yOffset = yOffset
         self.width = width
         self.height = height
         self.cornerRadius = cornerRadius
@@ -832,7 +850,7 @@ public struct KeyCastTheme: Decodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case anchor, offsetX, offsetY, width, height, cornerRadius, paddingX, paddingY
+        case anchor, xOffset, yOffset, width, height, cornerRadius, paddingX, paddingY
         case background, textColor, borderColor, shadowColor, textFont
     }
 
@@ -840,13 +858,13 @@ public struct KeyCastTheme: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = KeyCastTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
-        offsetX = try c.decodeIfPresent(Double.self, forKey: .offsetX) ?? d.offsetX
-        offsetY = try c.decodeIfPresent(Double.self, forKey: .offsetY) ?? d.offsetY
-        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? d.width
-        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? d.height
-        cornerRadius = try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius
-        paddingX = try c.decodeIfPresent(Double.self, forKey: .paddingX) ?? d.paddingX
-        paddingY = try c.decodeIfPresent(Double.self, forKey: .paddingY) ?? d.paddingY
+        xOffset = try tomlDouble(c, forKey: .xOffset, default: d.xOffset)
+        yOffset = try tomlDouble(c, forKey: .yOffset, default: d.yOffset)
+        width = try tomlDouble(c, forKey: .width, default: d.width)
+        height = try tomlDouble(c, forKey: .height, default: d.height)
+        cornerRadius = try tomlDouble(c, forKey: .cornerRadius, default: d.cornerRadius)
+        paddingX = try tomlDouble(c, forKey: .paddingX, default: d.paddingX)
+        paddingY = try tomlDouble(c, forKey: .paddingY, default: d.paddingY)
         background = try c.decodeIfPresent(ThemeColor.self, forKey: .background) ?? d.background
         textColor = try c.decodeIfPresent(ThemeColor.self, forKey: .textColor) ?? d.textColor
         borderColor =

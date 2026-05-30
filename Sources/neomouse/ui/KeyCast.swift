@@ -58,8 +58,8 @@ final class KeyCast {
         let origin = theme.anchor.origin(
             in: screen.visibleFrame,
             panelSize: panelSize,
-            offsetX: theme.offsetX,
-            offsetY: theme.offsetY
+            offsetX: theme.xOffset,
+            offsetY: theme.yOffset
         )
         window?.setFrame(CGRect(origin: origin, size: panelSize), display: true)
         window?.orderFrontRegardless()

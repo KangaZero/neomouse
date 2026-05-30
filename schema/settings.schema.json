@@ -253,8 +253,8 @@
           "additionalProperties": false,
           "properties": {
             "anchor": { "$ref": "#/$defs/themeAnchor" },
-            "offset_x": { "type": "number" },
-            "offset_y": { "type": "number" },
+            "x_offset": { "type": "number" },
+            "y_offset": { "type": "number" },
             "width": { "type": "number", "exclusiveMinimum": 0 },
             "height": { "type": "number", "exclusiveMinimum": 0 },
             "corner_radius": { "type": "number", "minimum": 0 },
@@ -338,8 +338,8 @@
           "additionalProperties": false,
           "properties": {
             "anchor": { "$ref": "#/$defs/themeAnchor" },
-            "offset_x": { "type": "number" },
-            "offset_y": { "type": "number" },
+            "x_offset": { "type": "number" },
+            "y_offset": { "type": "number" },
             "width": { "type": "number", "exclusiveMinimum": 0 },
             "height": { "type": "number", "exclusiveMinimum": 0 },
             "corner_radius": { "type": "number", "minimum": 0 },
@@ -356,8 +356,8 @@
           "additionalProperties": false,
           "properties": {
             "anchor": { "$ref": "#/$defs/themeAnchor" },
-            "offset_x": { "type": "number" },
-            "offset_y": { "type": "number" },
+            "x_offset": { "type": "number" },
+            "y_offset": { "type": "number" },
             "width": { "type": "number", "exclusiveMinimum": 0 },
             "height": { "type": "number", "exclusiveMinimum": 0 },
             "corner_radius": { "type": "number", "minimum": 0 },
