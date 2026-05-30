@@ -23,10 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NeoMouse.keyEventTap = nil
         }
         NeoMouse.keyHandler = nil
-        if let mouseMonitor = NeoMouse.mouseMonitor {
-            NSEvent.removeMonitor(mouseMonitor)
-            NeoMouse.mouseMonitor = nil
-        }
+        NeoMouse.removeVisualMouseMonitor()
+        NeoMouse.isVisualObserver?.cancel()
+        NeoMouse.isVisualObserver = nil
         NeoMouse.modeObserver?.cancel()
         NeoMouse.modeObserver = nil
         NeoMouse.pasteboardWatcher?.invalidate()
