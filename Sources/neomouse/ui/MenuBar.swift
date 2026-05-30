@@ -125,6 +125,25 @@ private struct MenuBarContent: View {
             Button("Help") { HelpDialog.shared.toggle() }
         }
 
+        Section("Diagnostics") {
+            // The log file is created at module load when running from a
+            // bundled .app, so it exists by the time the menu opens.
+            // `currentLogFileURL` is nil for bare-binary `swift run` — in
+            // that case stdout is the live channel and we surface an
+            // explanatory disabled item rather than a broken Open.
+            if let logURL = currentLogFileURL {
+                Button("Show Debug Log") {
+                    NSWorkspace.shared.open(logURL)
+                }
+                Button("Reveal Log in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([logURL])
+                }
+            } else {
+                Button("Debug log: stdout only (no file)") {}
+                    .disabled(true)
+            }
+        }
+
         Section {
             Button("Restart") { restart() }
             Button("Quit NeoMouse") { NSApp.terminate(nil) }

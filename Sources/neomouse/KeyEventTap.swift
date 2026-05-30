@@ -1,4 +1,5 @@
 import AppKit
+import IOKit.hid
 
 import neomouseUtils
 
@@ -22,14 +23,30 @@ extension NeoMouse {
         let state = NeoMouse.sharedState
         let keyMask: CGEventMask = 1 << CGEventType.keyDown.rawValue
 
-        // Ask TCC for Accessibility up-front. With prompt=true, macOS shows its
-        // native "Open System Settings" dialog if we're not already trusted —
-        // tapCreate would otherwise just return nil with no user-visible cue.
+        // Both Accessibility AND Input Monitoring TCC grants are required for
+        // a session-level keyDown tap to actually receive events. Prompt for
+        // both up-front so the user sees the system dialogs on first launch
+        // instead of a silent tapCreate failure.
+        //
+        // TCC shows each prompt at most once per (app bundle, decision-state)
+        // — subsequent runs are no-op if already decided. Users who denied
+        // must re-enable from System Settings → Privacy & Security.
+
+        // Accessibility: prompt=true triggers the native dialog when untrusted.
         // Hard-coded key string (== kAXTrustedCheckOptionPrompt) to dodge the
         // Swift 6 concurrency check on the imported CFStringRef global.
         let axOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         if !AXIsProcessTrustedWithOptions(axOptions) {
             debug("Accessibility not granted — system prompt shown; tap install will likely fail this run")
+        }
+
+        // Input Monitoring: distinct TCC bucket (kIOHIDRequestTypeListenEvent).
+        // `IOHIDRequestAccess` returns true if granted, otherwise shows the
+        // native prompt (once) and returns false. Without this grant, even an
+        // Accessibility-trusted process won't receive keyboard events through
+        // a `.cgSessionEventTap`.
+        if !IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) {
+            debug("Input Monitoring not granted — system prompt shown; tap install will likely fail this run")
         }
 
         if state.isDisableKeyInput {

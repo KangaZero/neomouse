@@ -269,22 +269,35 @@ DEBUG=1 swift run -c release  # locally built release binary
 
 Debug builds always print to stdout regardless of the env var.
 
-**File logging** is enabled when:
+**File logging** is enabled when *either* of these is true:
 
-- The env var `LOG` is set to a non-empty, non-falsy value.
-- `LOG_LOCATION` (optional) sets the destination. Default: `/tmp/neomouse/logs/neomouse.log`.
-  - If `LOG_LOCATION` ends in `.log`, it's treated as a full file path.
-  - Otherwise it's treated as a directory and `neomouse.log` is appended.
-  - The parent directory is created if missing. The file is opened append-only.
+- `LOG` env var is non-empty / non-falsy (explicit opt-in — primarily a dev override), **or**
+- The process is running from a bundled `.app` (i.e. `Bundle.main.bundleIdentifier` is set — `just run`, brew install, nix run, manual `.app` extraction). Set `LOG=0` (or `false`) to opt back out in that case.
+
+This means **users running the release `.app` get a log file by default** — no env-var dance — and the menu-bar **Diagnostics → Show Debug Log** / **Reveal Log in Finder** items open it for them.
+
+**Destination** (first match):
+
+1. `$LOG_LOCATION` — full file path if it ends in `.log`, else dir + `neomouse.log`.
+2. `~/Library/Logs/neomouse/neomouse.log` — when running from a bundle. Standard Apple location; opens directly in Console.app.
+3. `/tmp/neomouse/logs/neomouse.log` — legacy fallback (LOG=1 set, no LOG_LOCATION, bare `swift run`).
 
 ```sh
-LOG=1 neomouse                                         # → /tmp/neomouse/logs/neomouse.log
-LOG=1 LOG_LOCATION=~/Library/Logs/neomouse neomouse    # → ~/Library/Logs/neomouse/neomouse.log
-LOG=1 LOG_LOCATION=/tmp/x.log neomouse                 # → /tmp/x.log
-DEBUG=1 LOG=1 neomouse                                 # both stdout and file
+# Bundled install (brew/nix/manual .app/`just run`): log file is on by default.
+# Disable explicitly:
+LOG=0 neomouse
+
+# Override the destination:
+LOG_LOCATION=~/scratch/nm.log neomouse
+LOG_LOCATION=/tmp/x neomouse           # → /tmp/x/neomouse.log
+
+# Bare `swift run` (no bundle): logs to stdout only unless you opt in
+LOG=1 swift run                        # → /tmp/neomouse/logs/neomouse.log
+LOG=1 LOG_LOCATION=~/scratch/nm.log swift run
+DEBUG=1 LOG=1 swift run                # both stdout and file
 ```
 
-The env-var checks are evaluated once at module load, so per-`debug()` overhead is a `Bool` check plus formatting. File writes are serialized on a background queue.
+The env-var + bundle checks are evaluated once at module load, so per-`debug()` overhead is a `Bool` check plus formatting. File writes are serialized on a background queue.
 
 ### Lint / format config
 

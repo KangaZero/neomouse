@@ -7,10 +7,23 @@ import Foundation
 //       `swift build` / `swift run`; `swift build -c release` does not), OR
 //     * the env var DEBUG is set to a non-empty, non-falsy value.
 //
-//   file   — enabled if the env var LOG is set to a non-empty, non-falsy value.
-//     Destination is LOG_LOCATION (default: /tmp/neomouse/logs). If
-//     LOG_LOCATION ends in `.log` it is treated as the full file path;
-//     otherwise it is treated as a directory and `neomouse.log` is appended.
+//   file   — enabled in any of these cases:
+//     * the env var LOG is set to a non-empty, non-falsy value (explicit
+//       opt-in — primarily a dev override), OR
+//     * the process is running from a bundled .app (Bundle.main has a
+//       CFBundleIdentifier) AND the env var LOG is not explicitly "0"/"false".
+//       This is what `just run` / brew / nix / manual-tarball launches look
+//       like in practice. Bare `swift run` falls outside this — Bundle.main
+//       has no identifier there, so file logging stays opt-in.
+//
+//     Destination resolution order:
+//       1. $LOG_LOCATION (full file path if it ends in `.log`, else dir +
+//          `neomouse.log`)
+//       2. ~/Library/Logs/neomouse/neomouse.log  (default when bundled)
+//       3. /tmp/neomouse/logs/neomouse.log       (legacy dev fallback when
+//                                                 LOG=1 is set without
+//                                                 LOG_LOCATION outside an .app)
+//
 //     File is opened append-only at module load and the parent directory is
 //     created if missing. Writes are serialized on a background queue. Open
 //     failures are reported once to stderr and disable file logging.
@@ -25,6 +38,11 @@ private func isTruthy(_ value: String?) -> Bool {
     return value != "0" && value.lowercased() != "false"
 }
 
+private func isFalsy(_ value: String?) -> Bool {
+    guard let value, !value.isEmpty else { return false }
+    return value == "0" || value.lowercased() == "false"
+}
+
 private let stdoutEnabled: Bool = {
     #if DEBUG
         return true
@@ -35,19 +53,45 @@ private let stdoutEnabled: Bool = {
 
 private let logWriteQueue = DispatchQueue(label: "neomouse.debug.log", qos: .utility)
 
-private let logFileHandle: FileHandle? = {
-    guard isTruthy(ProcessInfo.processInfo.environment["LOG"]) else { return nil }
+/// The resolved log-file path used by this process, or nil if file logging
+/// is disabled. Other code (e.g. the menu-bar "Show Debug Log" item) can
+/// read this to expose the log location to the user.
+public let currentLogFileURL: URL? = {
+    let env = ProcessInfo.processInfo.environment
+    let envLogValue = env["LOG"]
+    let isBundled = Bundle.main.bundleIdentifier != nil
 
-    let location = ProcessInfo.processInfo.environment["LOG_LOCATION"]
-    let filePath: String
-    if let location, location.hasSuffix(".log") {
-        filePath = location
+    // Enable file logging when explicitly requested OR when running from a
+    // bundled .app. Allow LOG=0/false to disable even in the bundled case.
+    let enabled: Bool
+    if isFalsy(envLogValue) {
+        enabled = false
+    } else if isTruthy(envLogValue) || isBundled {
+        enabled = true
     } else {
-        let dir = location ?? "/tmp/neomouse/logs"
-        filePath = (dir as NSString).appendingPathComponent("neomouse.log")
+        enabled = false
     }
+    guard enabled else { return nil }
 
-    let url = URL(fileURLWithPath: filePath)
+    if let location = env["LOG_LOCATION"] {
+        if location.hasSuffix(".log") {
+            return URL(fileURLWithPath: location)
+        }
+        return URL(fileURLWithPath: (location as NSString).appendingPathComponent("neomouse.log"))
+    }
+    if isBundled {
+        // ~/Library/Logs/neomouse/neomouse.log — standard Apple-recommended
+        // location for user-visible app logs; opens directly in Console.app.
+        if let libraryLogs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first {
+            return libraryLogs.appendingPathComponent("Logs/neomouse/neomouse.log")
+        }
+    }
+    // Last-resort fallback (LOG=1 set, no LOG_LOCATION, bare `swift run`).
+    return URL(fileURLWithPath: "/tmp/neomouse/logs/neomouse.log")
+}()
+
+private let logFileHandle: FileHandle? = {
+    guard let url = currentLogFileURL else { return nil }
     do {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -59,7 +103,7 @@ private let logFileHandle: FileHandle? = {
         try handle.seekToEnd()
         return handle
     } catch {
-        let warning = "neomouse: failed to open log file \(filePath): \(error)\n"
+        let warning = "neomouse: failed to open log file \(url.path): \(error)\n"
         FileHandle.standardError.write(Data(warning.utf8))
         return nil
     }
