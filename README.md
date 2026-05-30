@@ -188,8 +188,8 @@ Other recipes:
 |---|---|
 | `just build` | Debug build → `.build/debug/neomouse` |
 | `just release` | Release build → `.build/release/neomouse` |
-| `just run` | Build and run the debug binary |
-| `just run-release` | Build and run the release binary |
+| `just run` | Build, assemble `.build/debug/neomouse.app` wrapper, run the binary from inside it |
+| `just run-release` | Same, for the release config |
 | `just test` | Run the test suite (`swift test`) |
 | `just lint` | `swift format lint --strict` on `Sources/` and `Tests/` |
 | `just fmt` | `swift format -i` to auto-format in place |
@@ -204,12 +204,14 @@ macOS will prompt for Accessibility permissions the first time you launch from e
 The justfile is a thin wrapper. If you want to run things by hand:
 
 ```sh
-swift build                  # debug build
-swift build -c release       # release build
-swift run                    # build + run debug
-swift run -c release         # build + run release
+swift build                  # debug build (binary only, no .app wrapper)
+swift build -c release       # release build (binary only, no .app wrapper)
+swift run                    # build + run debug — but see caveat below
+swift run -c release         # build + run release — same caveat
 swift test                   # run the test suite
 ```
+
+> **Heads up:** `swift run` launches the bare Mach-O at `.build/<config>/neomouse` directly. macOS LaunchServices only reads `CFBundleIdentifier` from a real `.app/Contents/Info.plist` — embedding the same plist in the binary's `__TEXT,__info_plist` section is not enough — so SwiftUI's `MenuBarExtra` silently fails to register a status item. `just run` works around this by assembling `.build/<config>/neomouse.app` from the repo-root `Info.plist` and launching the inner binary from inside that bundle. **If you're working on anything menu-bar-related, use `just run` (or hand-assemble the wrapper yourself), not `swift run`.**
 
 `swift test` uses [swift-testing](https://github.com/swiftlang/swift-testing) (`import Testing`). With the mise-pinned swift.org toolchain (or full Xcode), it Just Works — both `Testing` and `_TestingInterop` ship in the toolchain. If you're stuck on a Command Line Tools-only install, `_TestingInterop` is missing and the link step will fail; install full Xcode or use the mise pin above.
 

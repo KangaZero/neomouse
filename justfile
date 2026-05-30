@@ -19,13 +19,26 @@ build:
 release:
     swift build -c release
 
-# Build and run the debug binary
-run:
-    swift run
+# Assemble a minimal .app wrapper around an existing binary so SwiftUI's
+# MenuBarExtra registers a status item (LaunchServices only reads bundle
+# metadata from .app/Contents/Info.plist — embedding the Info.plist into
+# the bare Mach-O's __TEXT,__info_plist section is not sufficient).
+# Args: $1 = build config dir ("debug" / "release"), $2 = output app dir name.
+_app config:
+    @mkdir -p ".build/{{config}}/neomouse.app/Contents/MacOS"
+    @cp Info.plist ".build/{{config}}/neomouse.app/Contents/Info.plist"
+    @cp ".build/{{config}}/neomouse" ".build/{{config}}/neomouse.app/Contents/MacOS/neomouse"
 
-# Build and run the release binary
-run-release:
-    swift run -c release
+# Build + assemble debug .app, then run it from inside the bundle so stdout
+# stays attached to this terminal (vs. `open` which detaches). Launching via
+# the .app/Contents/MacOS/<binary> path is what makes LaunchServices treat
+# the process as a bundled UI app — the menu-bar status item depends on it.
+run: build (_app "debug")
+    .build/debug/neomouse.app/Contents/MacOS/neomouse
+
+# Same shape, release config.
+run-release: release (_app "release")
+    .build/release/neomouse.app/Contents/MacOS/neomouse
 
 # Run the test suite
 test:
