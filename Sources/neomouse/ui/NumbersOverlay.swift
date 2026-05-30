@@ -188,21 +188,11 @@ final class NumbersOverlay {
         reanchorIfNeeded(mouseLocation: NSEvent.mouseLocation)
 
         if window == nil {
-            let win = NSWindow(
+            window = OverlayWindow.makeFullscreenClickThrough(
                 contentRect: Self.rectForScreen(currentScreen),
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
+                rootView: NumbersOverlayView(model: model),
+                hasShadow: false
             )
-            win.isOpaque = false
-            win.backgroundColor = .clear
-            win.hasShadow = false
-            win.level = .screenSaver
-            win.ignoresMouseEvents = true
-            win.isReleasedWhenClosed = false
-            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            win.contentView = NSHostingView(rootView: NumbersOverlayView(model: model))
-            window = win
         }
         window?.setFrame(Self.rectForScreen(currentScreen), display: true)
         window?.orderFrontRegardless()

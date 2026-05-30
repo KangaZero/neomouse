@@ -19,7 +19,6 @@ extension NeoMouse {
 
         @MainActor
         static func normalYank(event: NSEvent, currentSession: Session, appState: NeoMouseState) {
-            // appState.operationCountAsString = nil
             //TODO: consider moving modifier flag check to caller (NeoMouseApp)
             //As functions should ideally just do one thing
             guard
@@ -28,24 +27,12 @@ extension NeoMouse {
                         .shift, .capsLock,
                     ])),
                 appState.isVisual,
-                let startX = appState.startCGXPoint,
-                let startY = appState.startCGYPoint,
-                let endX = appState.endCGXPoint,
-                let endY = appState.endCGYPoint
+                let rect = appState.currentVisualRect
             else {
                 //Normal copy to register
                 appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                 return
             }
-            let currentVisualHighlightWidth: CGFloat = abs(endX - startX)
-            let currentVisualHighlightHeight: CGFloat = abs(endY - startY)
-            let currentVisualHighlightCGRect = CGRect(
-                x: min(startX, endX),
-                y: min(startY, endY),
-                width: currentVisualHighlightWidth,
-                height: currentVisualHighlightHeight
-            )
-            let rect = currentVisualHighlightCGRect
 
             Task { @MainActor in
                 do {
@@ -70,6 +57,17 @@ extension NeoMouse {
                     appState.isVisual = false
                 } catch {
                     debug("For operation 'y' screenshot failed: \(error)")
+                    if isScreenCaptureTCCError(error) {
+                        // -3801: user denied Screen Recording. Surface an
+                        // actionable toast and open the right Settings pane
+                        // — otherwise the user sees nothing copy and has no
+                        // hint that a permission needs flipping. Settings
+                        // grants only take effect on next launch.
+                        ToastManager.shared.show(
+                            "Screen Recording permission required for yank — enable in System Settings, then relaunch"
+                        )
+                        openScreenRecordingSettings()
+                    }
                     appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                     appState.isVisual = false
                 }
@@ -88,6 +86,9 @@ extension NeoMouse {
             else {
                 return
             }
+            guard let sessionId = currentSession.id else {
+                return debug("registerYank - currentSession has no id; was the session persisted?")
+            }
             // Capture BEFORE we trigger ⌘C so the polling helper has a stable
             // reference point. Reading changeCount after simulate(.copy) would
             // race against the synthesized event itself.
@@ -100,7 +101,7 @@ extension NeoMouse {
                 }
                 debug("Copied item to clipboard: \(Pasteboard.preview(pasteboardItem))")
                 Register.set(
-                    register: activeRegister, item: pasteboardItem, sessionId: currentSession.id!)
+                    register: activeRegister, item: pasteboardItem, sessionId: sessionId)
                 RegisterMenu.shared.refresh()
             }
         }
@@ -109,6 +110,11 @@ extension NeoMouse {
         static func registerCurrentPasteboardItem(
             currentSession: Session, activeRegister: String
         ) {
+            guard let sessionId = currentSession.id else {
+                return debug(
+                    "registerCurrentPasteboardItem - currentSession has no id; was the session persisted?"
+                )
+            }
             // Capture immediately on entry. Typical caller pattern is
             // normalYank() then registerCurrentPasteboardItem() — at this
             // point normalYank's screenshot Task hasn't yet written to the
@@ -126,7 +132,7 @@ extension NeoMouse {
                 Register.set(
                     register: activeRegister,
                     item: pasteboardItem,
-                    sessionId: currentSession.id!
+                    sessionId: sessionId
                 )
                 RegisterMenu.shared.refresh()
                 debug(
@@ -139,6 +145,11 @@ extension NeoMouse {
         static func autoRegisterToNumeralsCurrentPasteboardItem(
             currentSession: Session
         ) {
+            guard let sessionId = currentSession.id else {
+                return debug(
+                    "autoRegisterToNumeralsCurrentPasteboardItem - currentSession has no id; was the session persisted?"
+                )
+            }
             let initialChangeCount = NSPasteboard.general.changeCount
             Pasteboard.waitForChange(after: initialChangeCount) { pasteboardItem in
                 guard let pasteboardItem else {
@@ -150,14 +161,14 @@ extension NeoMouse {
                 for numeral in 1...9 {
                     let isExistingNumeralRegister =
                         Register.get(
-                            register: "\(numeral)", sessionId: currentSession.id!) != nil
+                            register: "\(numeral)", sessionId: sessionId) != nil
                     if isExistingNumeralRegister {
                         continue
                     } else {
                         Register.set(
                             register: "\(numeral)",
                             item: pasteboardItem,
-                            sessionId: currentSession.id!
+                            sessionId: sessionId
                         )
                         isNotFilledNumeralRegisterExists = true
                         break
@@ -197,6 +208,11 @@ extension NeoMouse {
         static func registerCurrentPasteboardItemToSystemRegister(
             currentSession: Session, systemRegister: String = "+"
         ) {
+            guard let sessionId = currentSession.id else {
+                return debug(
+                    "registerCurrentPasteboardItemToSystemRegister - currentSession has no id; was the session persisted?"
+                )
+            }
             let initialChangeCount = NSPasteboard.general.changeCount
             Pasteboard.waitForChange(after: initialChangeCount) { pasteboardItem in
                 guard let pasteboardItem else {
@@ -207,7 +223,7 @@ extension NeoMouse {
                 Register.set(
                     register: systemRegister,
                     item: pasteboardItem,
-                    sessionId: currentSession.id!
+                    sessionId: sessionId
                 )
                 RegisterMenu.shared.refresh()
                 debug(
@@ -218,8 +234,13 @@ extension NeoMouse {
 
         @MainActor
         static func writeSystemRegistesToPasteboard(currentSession: Session, systemRegister: String = "+") {
+            guard let sessionId = currentSession.id else {
+                return debug(
+                    "writeSystemRegistesToPasteboard - currentSession has no id; was the session persisted?"
+                )
+            }
             guard
-                let item = Register.get(register: systemRegister, sessionId: currentSession.id!)?
+                let item = Register.get(register: systemRegister, sessionId: sessionId)?
                     .pasteboardItem
             else {
                 debug("writeSystemRegistesToPasteboard: register '\(systemRegister)' empty")
@@ -243,8 +264,13 @@ extension NeoMouse {
             else {
                 return
             }
+            guard let sessionId = currentSession.id else {
+                return debug(
+                    "pasteFromRegister - currentSession has no id; was the session persisted?"
+                )
+            }
             guard
-                let item = Register.get(register: activeRegister, sessionId: currentSession.id!)?
+                let item = Register.get(register: activeRegister, sessionId: sessionId)?
                     .pasteboardItem
             else {
                 debug("pasteFromRegister: register '\(activeRegister)' empty")
@@ -273,59 +299,41 @@ extension NeoMouse {
                 return
             }
             guard
-                appState.previousVisualStartCGXPoint != nil && appState.previousVisualStartCGYPoint != nil
-                    && appState.previousVisualEndCGXPoint != nil && appState.previousVisualEndCGYPoint != nil
+                let previousStart = appState.previousVisual.startPos,
+                let previousEnd = appState.previousVisual.endPos
             else {
                 debug("goToPreviousVisualState: previous visual state CG points not found, ignoring")
                 return
             }
             appState.isVisual = true
-            appState.startCGXPoint = appState.previousVisualStartCGXPoint
-            appState.startCGYPoint = appState.previousVisualStartCGYPoint
-            appState.endCGXPoint = appState.previousVisualEndCGXPoint
-            appState.endCGYPoint = appState.previousVisualEndCGYPoint
+            appState.visual = NeomouseType.VisualState(
+                startPos: previousStart, endPos: previousEnd
+            )
             VisualHighlightOverlay.shared.passAppState(state: appState)
-            Mouse.moveToGlobal(
-                x: appState.endCGXPoint!,
-                y: appState.endCGYPoint!)
+            Mouse.moveToGlobal(x: previousEnd.x, y: previousEnd.y)
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-            // appState.operationCountAsString = nil
         }
 
-        /// Sets previousVisualCGPoints with the current CG points,
-        /// clears current CG points,
-        /// sets NeomouseState isVisual to false
-        /// hides visual overlay
-        /// lastly sets mode to normal with no pending operation and clears operationCountAsString
+        /// Snapshots the current visual selection into `previousVisual`, clears
+        /// the current selection, exits visual mode, hides the overlay, and
+        /// returns to normal mode.
         @MainActor
         static func exitVisualState(
             appState: NeoMouseState, visualHighlightOverlay: VisualHighlightOverlay
         ) {
-            guard appState.startCGXPoint != nil && appState.endCGXPoint != nil else { return }
-            Mouse.up(.left, at: CGPoint(x: appState.endCGXPoint!, y: appState.endCGYPoint!))
-            //TODO Eventually use Session.Operations Table
-            guard
-                appState.startCGXPoint != nil && appState.startCGYPoint != nil
-                    && appState.endCGXPoint != nil && appState.endCGYPoint != nil
-            else {
+            guard appState.visual.startPos != nil, let end = appState.visual.endPos else {
                 return debug(
                     "Could not retrieve start or end CG points in exitVisualState",
-                    "startCGPoint:\(String(describing: appState.startCGXPoint)), \(String(describing: appState.startCGYPoint)), endCGPoint: \(String(describing: appState.endCGXPoint)), \(String(describing: appState.endCGYPoint))"
+                    "visual: \(String(describing: appState.visual))"
                 )
             }
-            appState.previousVisualStartCGXPoint = appState.startCGXPoint
-            appState.previousVisualStartCGYPoint = appState.startCGYPoint
-            appState.previousVisualEndCGXPoint = appState.endCGXPoint
-            appState.previousVisualEndCGYPoint = appState.endCGYPoint
-            appState.startCGXPoint = nil
-            appState.startCGYPoint = nil
-            appState.endCGXPoint = nil
-            appState.endCGYPoint = nil
+            Mouse.up(.left, at: end)
+            //TODO Eventually use Session.Operations Table
+            appState.savePreviousAndClearVisual()
             //IMPORTANT: must set isVisual to false!
             appState.isVisual = false
             visualHighlightOverlay.hideOverlay()
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-            // appState.operationCountAsString = nil
         }
 
         @MainActor
@@ -352,10 +360,8 @@ extension NeoMouse {
                 return
             }
             //Enter visual state
-            appState.startCGXPoint = currentCGPoint.x
-            appState.startCGYPoint = currentCGPoint.y
-            appState.endCGXPoint = currentCGPoint.x
-            appState.endCGYPoint = currentCGPoint.y
+            appState.setVisualStart(currentCGPoint)
+            appState.setVisualEnd(currentCGPoint)
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             VisualHighlightOverlay.shared.passAppState(state: appState)
         }

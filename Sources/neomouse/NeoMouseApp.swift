@@ -21,14 +21,17 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     @Published var gridInset: CGFloat
     //TODO Eventually use Session.Operations Table for the below Published var
     @Published var isVisual: Bool = false
-    @Published var previousVisualStartCGXPoint: CGFloat? = nil
-    @Published var previousVisualStartCGYPoint: CGFloat? = nil
-    @Published var previousVisualEndCGXPoint: CGFloat? = nil
-    @Published var previousVisualEndCGYPoint: CGFloat? = nil
-    @Published var startCGXPoint: CGFloat? = nil
-    @Published var startCGYPoint: CGFloat? = nil
-    @Published var endCGXPoint: CGFloat? = nil
-    @Published var endCGYPoint: CGFloat? = nil
+
+    /// Current visual-mode selection (start + end CG points). Single source
+    /// of truth — the eight pre-existing per-coord properties
+    /// (startCGXPoint, startCGYPoint, …, previousVisualEndCGYPoint) are now
+    /// computed-property shims that read/write through this struct. New code
+    /// should prefer `visual`, `previousVisual`, `currentVisualRect`, and
+    /// the `setVisualStart/setVisualEnd/clearVisual` helpers below.
+    @Published var visual: NeomouseType.VisualState = .init()
+    /// Snapshot of `visual` at the moment `exitVisualState()` last ran.
+    /// `goToPreviousVisualState` (and the gv keybind) restores from this.
+    @Published var previousVisual: NeomouseType.VisualState = .init()
 
     // @Published var operationCountAsString: String? = nil
     @Published var currentSession: Session? = nil
@@ -61,6 +64,10 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     // Configuration settings
     let isDisableKeyInput: Bool
     let modeOnStart: NeomouseType.ConfigMode
+    /// Gates the vim-showcmd KeyCast overlay. When false, the panel is never
+    /// shown regardless of what's pending; when true, KeyCast.update() decides
+    /// per-state whether to surface it.
+    let isShowKeyCast: Bool
     //TODO add the rest
 
     // User-overridable visual theme for every overlay / menu / toast.
@@ -102,6 +109,8 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
             config?.configuration.isDisableKeyInput ?? Config.Configuration.defaultIsDisableKeyInput
         self.modeOnStart =
             config?.configuration.modeOnStart ?? Config.Configuration.defaultModeOnStart
+        self.isShowKeyCast =
+            config?.configuration.isShowKeyCast ?? Config.Configuration.defaultIsShowKeyCast
         self.theme = config?.theme ?? Config.Theme()
 
         mode = {
@@ -141,6 +150,108 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     /// (wildmenu cache would need a rebuild).
     func reload(from config: Config) {
         theme = config.theme ?? Config.Theme()
+    }
+
+    // MARK: - Visual selection helpers
+
+    /// Returns the active visual selection as a normalized CGRect, or nil
+    /// when either endpoint is missing. Callers no longer have to unpack
+    /// four separate optional point fields and compute min/abs/width/height
+    /// themselves — they get a single guarded value.
+    var currentVisualRect: CGRect? { Self.rect(from: visual) }
+    /// Same idea for the previous selection — what `goToPreviousVisualState`
+    /// restores from.
+    var previousVisualRect: CGRect? { Self.rect(from: previousVisual) }
+
+    private static func rect(from selection: NeomouseType.VisualState) -> CGRect? {
+        guard let s = selection.startPos, let e = selection.endPos else { return nil }
+        return CGRect(
+            x: min(s.x, e.x),
+            y: min(s.y, e.y),
+            width: abs(e.x - s.x),
+            height: abs(e.y - s.y)
+        )
+    }
+
+    /// Set the start point of the current selection — both x and y in one
+    /// atomic publish, instead of two separate `startCGXPoint = …` /
+    /// `startCGYPoint = …` writes.
+    func setVisualStart(_ point: CGPoint) {
+        visual.startPos = point
+    }
+
+    func setVisualEnd(_ point: CGPoint) {
+        visual.endPos = point
+    }
+
+    /// Snapshot the current selection into `previousVisual` and clear the
+    /// current selection. Mirrors the legacy "exit visual" pattern
+    /// (`previousVisualX = startX; startX = nil`) but in a single publish.
+    func savePreviousAndClearVisual() {
+        previousVisual = visual
+        visual = .init()
+    }
+
+    func clearVisualSelection() {
+        visual = .init()
+    }
+
+    // MARK: - Backwards-compatibility shims
+    //
+    // Pre-VisualState the class had eight `@Published` per-coord fields
+    // (startCGXPoint, startCGYPoint, …, previousVisualEndCGYPoint). These
+    // shims let the 70+ existing call sites in NeoMouseApp.swift,
+    // CoreOperations.swift, AppDelegate.swift, MarksMenu.swift, and the
+    // overlays keep compiling unchanged while the storage migrates to two
+    // `VisualState` structs. New code should prefer `visual` / `previousVisual`
+    // / `currentVisualRect` directly.
+    //
+    // Setting any one coordinate writes through to the underlying VisualState
+    // (using 0 for the missing coord if the matching point was nil). Setting
+    // any one coordinate to nil clears the whole point — matches the legacy
+    // usage pattern, which always paired `startCGXPoint = nil; startCGYPoint = nil`.
+
+    var startCGXPoint: CGFloat? {
+        get { visual.startPos?.x }
+        set { visual.startPos = Self.mergeX(newValue, into: visual.startPos) }
+    }
+    var startCGYPoint: CGFloat? {
+        get { visual.startPos?.y }
+        set { visual.startPos = Self.mergeY(newValue, into: visual.startPos) }
+    }
+    var endCGXPoint: CGFloat? {
+        get { visual.endPos?.x }
+        set { visual.endPos = Self.mergeX(newValue, into: visual.endPos) }
+    }
+    var endCGYPoint: CGFloat? {
+        get { visual.endPos?.y }
+        set { visual.endPos = Self.mergeY(newValue, into: visual.endPos) }
+    }
+    var previousVisualStartCGXPoint: CGFloat? {
+        get { previousVisual.startPos?.x }
+        set { previousVisual.startPos = Self.mergeX(newValue, into: previousVisual.startPos) }
+    }
+    var previousVisualStartCGYPoint: CGFloat? {
+        get { previousVisual.startPos?.y }
+        set { previousVisual.startPos = Self.mergeY(newValue, into: previousVisual.startPos) }
+    }
+    var previousVisualEndCGXPoint: CGFloat? {
+        get { previousVisual.endPos?.x }
+        set { previousVisual.endPos = Self.mergeX(newValue, into: previousVisual.endPos) }
+    }
+    var previousVisualEndCGYPoint: CGFloat? {
+        get { previousVisual.endPos?.y }
+        set { previousVisual.endPos = Self.mergeY(newValue, into: previousVisual.endPos) }
+    }
+
+    private static func mergeX(_ x: CGFloat?, into existing: CGPoint?) -> CGPoint? {
+        guard let x else { return nil }
+        return CGPoint(x: x, y: existing?.y ?? 0)
+    }
+
+    private static func mergeY(_ y: CGFloat?, into existing: CGPoint?) -> CGPoint? {
+        guard let y else { return nil }
+        return CGPoint(x: existing?.x ?? 0, y: y)
     }
 
     /// Baseline cell size in points used when both axes are `.automatic`
@@ -270,6 +381,21 @@ struct NeoMouse: App {
             )
             return
         }
+        // `Session.id` is `Int64?` (GRDB autoincrement). It's populated by the
+        // insert that ran during `initializeDB` above, so it's never nil here
+        // in practice — but rather than `currentSession.id!` repeatedly, bind
+        // once and surface a clear error if the invariant is ever broken.
+        guard let sessionId = currentSession.id else {
+            debug("Session loaded but had no id; was it persisted?")
+            showFatalAlertAndQuit(
+                title: "NeoMouse failed to start",
+                message: """
+                    The session loaded from the database is missing its row id. \
+                    This indicates a DB corruption issue — please report it.
+                    """
+            )
+            return
+        }
 
         //TODO Reenable once able to have register when proper content copying
         // Seed register "0" with whatever's on the clipboard at launch.
@@ -277,14 +403,16 @@ struct NeoMouse: App {
             Register.set(
                 register: "0",
                 item: currentPasteboardItem,
-                sessionId: currentSession.id!)
+                sessionId: sessionId)
             // debug("Pasteboard: \(Pasteboard.preview(currentPasteboardItem))")
         }
         debug("currentSession: \(String(describing: currentSession))")
         let _allScreensBoundingRect = Screen.allBoundingRect()
         debug("allScreensRect: \(String(describing: _allScreensBoundingRect))")
         let appState = NeoMouse.sharedState
-        // KeyCast.shared.passAppState(state: appState)
+        // KeyCast subscribes to $mode here so the vim-showcmd pill can
+        // appear/disappear reactively as soon as a pending op is set/cleared.
+        KeyCast.shared.passAppState(state: appState)
         // Wire appState into MarksMenu / RegisterMenu once at launch so their
         // refresh() calls work from .setMark / Register.set sites before the
         // menus have ever been shown.
@@ -398,1410 +526,41 @@ struct NeoMouse: App {
                     }
                 }
                 //TODO take in account of other keyboard layouts for event.keyCode
+                // Bundle everything the per-mode handlers need into a single
+                // value, then dispatch. Each handler lives in KeyHandlers.swift.
+                let ctx = KeyEventContext(
+                    event: event,
+                    appState: appState,
+                    currentSession: currentSession,
+                    sessionId: sessionId,
+                    currentCGPoint: currentCGPoint,
+                    localCGPoint: localCGPoint,
+                    currentDisplayBounds: currentDisplayBounds,
+                    currentScreenSize: currentScreenSize,
+                    operationCount: operationCount,
+                    asciiKey: asciiKey,
+                    asciiKeyBase: asciiKeyBase
+                )
                 switch appState.mode {
                 case .disabled:
+                    NeoMouse.handleDisabledMode(ctx: ctx)
                     return
-                case .normal(let currentPendingNormalOperation, let operationCountAsString):
-                    switch event.keyCode {
-                    case charToKeyCodeMap["Esc"]:
-                        guard event.modifierFlags.rawValue == 256 else {
-                            break
-                        }
-                        if appState.isVisual {
-                            debug("Esc pressed in visual mode, exiting visual state")
-                            CoreOperations.exitVisualState(
-                                appState: appState,
-                                visualHighlightOverlay:
-                                    VisualHighlightOverlay.shared)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        HelpDialog.shared.hide()
-                        CommandLine.shared.hide()
-                        GridOverlay.shared.hideGrid()
-                        CursorSurroundedGridOverlay.shared.hide()
-                        MarksMenu.shared.hide()
-                        RegisterMenu.shared.hide()
-                        return
-                    default: break
-                    }
-                    //Only allow count input in these conditions
-                    if currentPendingNormalOperation == .none || currentPendingNormalOperation == .special {
-                        switch asciiKey {
-                        //TODO change to current focused app and add in for g0
-                        case "0":
-                            guard event.modifierFlags.rawValue == 256 else {
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            // "0" pressed with no pending op and no count typed yet →
-                            // motion: go to start of current x-axis line (vim ^).
-                            // Otherwise: append "0" as a digit to the count buffer.
-                            guard
-                                // currentPendingNormalOperation == currentPendingNormalOperation,
-                                operationCountAsString == nil
-                            else {
-                                appState.mode = .normal(
-                                    currentPendingOperation: currentPendingNormalOperation,
-                                    operationCountAsString: (operationCountAsString ?? "") + (asciiKey ?? "")
-                                )
-                                return
-                            }
-                            let target = MotionTarget.leftEdge(
-                                localY: localCGPoint.y,
-                                gridInset: appState.gridInset)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                            return
-                        case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-                            guard event.modifierFlags.rawValue == 256, asciiKey?.count == 1 else {
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            appState.mode = .normal(
-                                currentPendingOperation: currentPendingNormalOperation,
-                                operationCountAsString: (operationCountAsString ?? "") + (asciiKey ?? ""))
-                            return
-                        default: break
-                        }
-                    }
-                    switch currentPendingNormalOperation {
-                    case .special:
-                        switch asciiKey {
-                        case "d", "D":
-                            guard
-                                event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ])
-                            else {
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            Gesture.scroll(
-                                direction: NeomouseType.Direction.down,
-                                at: currentCGPoint,
-                                stepValue: Int32(operationCount) * 30,  //TODO move to config
-                                incrementsPerGesture: 10
-                            )
-                            appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                            return
-                        case "u", "U":
-                            guard
-                                event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ])
-                            else {
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            Gesture.scroll(
-                                direction: NeomouseType.Direction.up,
-                                at: currentCGPoint,
-                                stepValue: Int32(operationCount) * 30,  //TODO move to config
-                                incrementsPerGesture: 10
-                            )
-                            appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                            return
-                        case "w", "W":
-                            guard
-                                event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ])
-                            else {
-                                debug(
-                                    "w/W contains wrong modifiers: \(event.modifierFlags)")
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none, operationCountAsString: nil)
-                            }
-                            appState.mode = .normal(currentPendingOperation: .window, operationCountAsString: nil)
-                            return
-                        case "f", "F":
-                            guard
-                                event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ])
-                            else {
-                                debug(
-                                    "f/F contains wrong modifiers: \(event.modifierFlags)")
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none, operationCountAsString: nil)
-                            }
-                            // Cursor-local dense find. Mode flip *before* show()
-                            // so the overlay's `case .specialFind = appState
-                            // .mode` guard matches.
-                            appState.mode = .specialFind
-                            Zoom.zoomIn()
-                            CursorSurroundedGridOverlay.shared.toggle()
-                            return
-                        default:
-                            //TODO Add indicator, and have Esc reset special instead
-                            break
-                        }
-                    case .g:
-                        switch asciiKey {
-                        case "g":
-                            guard event.modifierFlags.rawValue == 256 else {
-                                return debug("gg contains a modifier, ignoring")
-                            }
-                            if operationCount > 1 {
-                                debug(
-                                    ".g - with operationCount=\(operationCount) > 1, operation gg and currentPendingOperation set to .none"
-                                )
-                                let _ggUsable = CGRect(
-                                    x: appState.gridInset,
-                                    y: appState.gridInset,
-                                    width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                                    height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                                )
-                                let target = MotionTarget.toLineCount(
-                                    localX: localCGPoint.x,
-                                    screenHeight: currentScreenSize.height,
-                                    gridInset: appState.gridInset,
-                                    rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
-                                    count: operationCount)
-                                Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                                appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                                // appState.operationCountAsString = nil
-                                return
-                            } else {
-                                debug(
-                                    ".g - with operationCount=\(operationCount) <= 1, operation gg and currentPendingOperation set to .gg"
-                                )
-                                let target = MotionTarget.top(
-                                    localX: localCGPoint.x,
-                                    gridInset: appState.gridInset)
-                                Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                                appState.mode = .normal(
-                                    currentPendingOperation: .gg,
-                                    operationCountAsString: nil
-                                )
-                                return
-                            }
-                        case "v":
-                            if appState.isVisual {
-                                debug(
-                                    ".g - operation gv and isVisual=true, exiting visual state and setting currentPendingOperation to .none, operationCount reset to nil"
-                                )
-                                CoreOperations.exitVisualState(
-                                    appState: appState,
-                                    visualHighlightOverlay:
-                                        VisualHighlightOverlay.shared)
-                            } else {
-                                debug(".g - operation gv and isVisual=false, goToPreviousVisualState")
-                                CoreOperations.goToPreviousVisualState(
-                                    event: event, appState: appState,
-                                    currentPendingNormalOperation: currentPendingNormalOperation)
-                            }
-                            return
-                        case "m":
-                            guard event.modifierFlags.rawValue == 256 else {
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            let target = MotionTarget.horizontalMiddle(
-                                localY: localCGPoint.y,
-                                screenWidth: currentScreenSize.width)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                            appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                            return
-                        default:
-                            break
-                        }
-                        break
-                    case .gg:
-                        switch (asciiKey, appState.isVisual) {
-                        case ("y", false):
-                            guard event.modifierFlags.rawValue == 256 else {
-                                return
-                            }
-                            // appState.operationCountAsString = nil
-                            appState.mode = .normal(
-                                currentPendingOperation: .ggy,
-                                operationCountAsString: nil
-                            )
-                            return
-                        case ("v", false):
-                            CoreOperations.toggleVisualState(
-                                event: event, appState: appState,
-                                currentPendingNormalOperation: currentPendingNormalOperation,
-                                currentCGPoint: currentCGPoint,
-                                visualHighlightOverlay: VisualHighlightOverlay.shared
-                            )
-                            appState.mode = .normal(
-                                currentPendingOperation: .ggv,
-                                operationCountAsString: nil
-                            )
-                            return
-                        case ("\"", false):
-                            guard asciiKeyBase == "\"" else {
-                                debug(
-                                    "Expected '\"' for register operations, got \(String(describing: asciiKeyBase))"
-                                )
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            appState.mode = .normal(
-                                currentPendingOperation: .goToRegister,
-                                operationCountAsString: nil
-                            )
-                            return
-                        default:
-                            break
-                        }
-                        break
-                    case .ggy:
-                        guard
-                            asciiKey == "G"
-                        else {
-                            // go to .normal switch statement
-                            break
-                        }
-                        guard
-                            // INFO: This should never happen as .ggy can only be set in !appState.isVisual, but added in just in case
-                            !appState.isVisual
-                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .shift, .capsLock,
-                                ])
-                        else {
-                            // appState.operationCountAsString = nil
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        Task { @MainActor in
-                            do {
-                                let screenshotTaken = try await screenshot(
-                                    rect: currentDisplayBounds, excluding: CoreOperations.excludedWindowIDsForScreenshot
-                                )
-                                guard let screenshot = screenshotTaken else {
-                                    debug("ggyG screenshot failed: \(String(describing: screenshot))")
-                                    return
-                                }
-                                debug("ggvG screenshot success: \(screenshot)")
-                                let image = NSImage(cgImage: screenshot, size: .zero)
-                                NSSound(named: "Screen Capture")?.play()
-                                NSPasteboard.general.clearContents()
-                                let isCopiedToPasteBoard = NSPasteboard.general.writeObjects([image])
-                                if isCopiedToPasteBoard {
-                                    ToastManager.shared.show("Screenshot copied to clipboard")
-                                }
-                                if let pendingRegisterCharacter = appState.pendingRegisterCharacter {
-                                    CoreOperations.registerCurrentPasteboardItem(
-                                        currentSession: currentSession,
-                                        activeRegister: pendingRegisterCharacter)
-                                    debug(
-                                        "ggyG registered screenshot to register \(pendingRegisterCharacter)"
-                                    )
-                                    appState.pendingRegisterCharacter = nil
-                                }
-                            } catch {
-                                debug("ggy screenshot failed: \(error)")
-                            }
-                        }
-                        return
-                    case .ggv:
-                        guard
-                            asciiKey == "G"
-                        else {
-                            // go to .normal switch statement
-                            break
-                        }
-                        guard
-                            // INFO: This should happen as .ggv will set appState.isVisual to true, but added in just in case
-                            appState.isVisual
-                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .shift, .capsLock,
-                                ])
-                        else {
-                            // appState.operationCountAsString = nil
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        appState.startCGXPoint = currentDisplayBounds.origin.x
-                        appState.startCGYPoint = currentDisplayBounds.origin.y
-                        appState.endCGXPoint = currentDisplayBounds.origin.x + currentDisplayBounds.size.width
-                        appState.endCGYPoint = currentDisplayBounds.origin.y + currentDisplayBounds.size.height
-                        let target = MotionTarget.bottomRightEdge(
-                            screenWidth: currentScreenSize.width,
-                            screenHeight: currentScreenSize.height,
-                            gridInset: appState.gridInset)
-                        Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        debug(
-                            "ggvG visual state: start(\(appState.startCGXPoint!), \(appState.startCGYPoint!)) end(\(appState.endCGXPoint!), \(appState.endCGYPoint!))"
-                        )
-                        return
-                    case .window:
-                        switch asciiKeyBase {
-                        case "w", "W":
-                            guard
-                                event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ]), let adjacentScreenRect = Screen.adjacentRect()
-                            else {
-                                debug("No adjacent screen found for Special-w-w")
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            Mouse.moveToGlobal(
-                                x: adjacentScreenRect.midX,
-                                y: adjacentScreenRect.midY)
-                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        case "h", "j", "k", "l":
-                            guard
-                                // With shift or capslock, would swap over the 2 buffers in vim,
-                                // TODO: find a way to swap screens with the shift/capslock variant??
-                                event.modifierFlags.rawValue == 256
-                                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                        .shift, .capsLock,
-                                    ])
-                            else {
-                                debug(
-                                    "Special-w-\(asciiKeyBase ?? "?") contains an unexpected modifier"
-                                )
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            let direction: NeomouseType.Direction
-                            switch asciiKeyBase {
-                            case "h": direction = .left
-                            case "j": direction = .down
-                            case "k": direction = .up
-                            case "l": direction = .right
-                            default:
-                                debug("Unexpected character for Special-w-\(asciiKeyBase ?? "?")")
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            guard let nextScreenRect = Screen.adjacentDisplayRectByDirection(at: direction) else {
-                                debug(
-                                    "No adjacent screen found in direction \(direction) for Special-w-\(asciiKeyBase ?? "?")"
-                                )
-                                return appState.mode = .normal(
-                                    currentPendingOperation: .none,
-                                    operationCountAsString: nil
-                                )
-                            }
-                            Mouse.moveToGlobal(
-                                x: nextScreenRect.midX,
-                                y: nextScreenRect.midY)
-                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        default: break
-                        }
-                        break
-                    case .setMark:
-                        guard
-                            event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
-                        else {
-                            appState.mode = .normal(
-                                currentPendingOperation: .none, operationCountAsString: nil
-                            )
-                            debug("setMark mark contains a non-shift modifier")
-                            return
-                        }
-                        Mark.set(
-                            mark: event.characters!,
-                            isVisual: appState.isVisual,
-                            startCGXPoint: appState.isVisual ? Double(appState.startCGXPoint ?? currentCGPoint.x) : nil,
-                            startCGYPoint: appState.isVisual ? Double(appState.startCGYPoint ?? currentCGPoint.y) : nil,
-                            endCGXPoint: Double(currentCGPoint.x),
-                            endCGYPoint: Double(currentCGPoint.y),
-                            sessionId: currentSession.id!  // It should be autogenerated by sqlite
-                        )
-                        MarksMenu.shared.refresh()
-                        appState.mode = .normal(
-                            currentPendingOperation: .none, operationCountAsString: nil
-                        )
-                        return
-                    case .goToMark, .goToMarkExactState:
-                        guard
-                            event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
-                        else {
-                            appState.mode = .normal(
-                                currentPendingOperation: .none, operationCountAsString: nil
-                            )
-                            debug("goToMark mark contains a non-shift modifier")
-                            return
-                        }
-                        guard let mark = Mark.get(mark: event.characters!, sessionId: currentSession.id!) else {
-                            appState.mode = .normal(
-                                currentPendingOperation: .none, operationCountAsString: nil
-                            )
-                            debug("No mark found for goToMark with given character: \(event.characters!)")
-                            return
-                        }
-
-                        if currentPendingNormalOperation == .goToMarkExactState {
-                            appState.isVisual = mark.isVisual
-                            if mark.isVisual {
-                                appState.startCGXPoint = CGFloat(mark.startCGXPoint!)
-                                appState.startCGYPoint = CGFloat(mark.startCGYPoint!)
-                                appState.endCGXPoint = CGFloat(mark.endCGXPoint)
-                                appState.endCGYPoint = CGFloat(mark.endCGYPoint)
-                                VisualHighlightOverlay.shared.passAppState(state: appState)
-                                // Mouse.moveToGlobal(x: mark.startCGXPoint!, y: mark.startCGYPoint!)
-                            }
-                        }
-                        Mouse.moveToGlobal(
-                            x: mark.endCGXPoint,
-                            y: mark.endCGYPoint)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none, operationCountAsString: nil
-                        )
-                        return
-                    case .goToRegister:
-                        guard
-                            event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .shift, .capsLock,
-                                ])
-                        else {
-                            appState.mode = .normal(
-                                currentPendingOperation: .none, operationCountAsString: nil
-                            )
-                            debug("goToRegister register contains a non-shift modifier")
-                            return
-                        }
-                        //INFO: unlike setMark/goToMarkExactState/goToMark which has this guard clause in their respective fns,
-                        //goToRegister needs a manual check
-                        guard let register = event.characters, register.count == 1,
-                            register.first!.isLetter || register.first!.isNumber
-                        else {
-                            appState.mode = .normal(
-                                currentPendingOperation: .none, operationCountAsString: nil
-                            )
-                            debug(
-                                "goToRegister expected a single letter or number for register, got \(String(describing: event.characters))"
-                            )
-                            return
-                        }
-                        debug("goToRegister with register \(register)")
-                        appState.mode = .normal(
-                            currentPendingOperation: .registerAction(register: event.characters!),
-                            operationCountAsString: nil)
-                        return
-                    case .registerAction:
-                        guard
-                            (event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .shift, .capsLock,
-                                ])),
-                            case .normal(.registerAction(let activeRegister), _) = appState.mode
-                        else {
-                            appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                            debug("registerAction register contains a non-shift modifier or no activeRegister")
-                            return
-                        }
-                        switch asciiKey {
-                        case "y", "Y":
-                            if appState.isVisual {
-                                CoreOperations.normalYank(
-                                    event: event, currentSession: currentSession, appState: appState)
-                                CoreOperations.registerCurrentPasteboardItem(
-                                    currentSession: currentSession,
-                                    activeRegister: activeRegister)
-                            } else {
-                                debug(
-                                    "event char charactersIgnoringModifiers = \(String(describing: asciiKeyBase))"
-                                )
-                                //This allows the display to be screenshot with ggyG or "[register]yG or gg"[register]yG
-                                if asciiKeyBase == "y" {
-                                    appState.mode = .normal(currentPendingOperation: .ggy, operationCountAsString: nil)
-                                    appState.pendingRegisterCharacter = activeRegister
-                                    return
-                                } else {
-                                    CoreOperations.registerYank(
-                                        event: event, currentSession: currentSession, activeRegister: activeRegister)
-                                }
-                            }
-                            break
-                        case "d", "D":
-                            CoreOperations.delete(
-                                event: event, appState: appState, currentSession: currentSession)
-                            CoreOperations.registerCurrentPasteboardItem(
-                                currentSession: currentSession,
-                                activeRegister: activeRegister)
-                            break
-                        case "p", "P":
-                            CoreOperations.pasteFromRegister(
-                                event: event, appState: appState, currentSession: currentSession,
-                                activeRegister: activeRegister)
-                            break
-                        default:
-                            break
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
-                    default:
-                        break
-                    }
-                    // Second keystroke after "m": save current cursor as a mark.
-                    // Intercepts here so letters like "v"/"g" don't fall through to
-                    // their normal handlers when armed by a preceding "m".
-                    if currentPendingNormalOperation == .setMark,
-                        event.modifierFlags.rawValue == 256,
-                        let markChar = event.characters,
-                        markChar.count == 1,
-                        let first = markChar.first,
-                        first.isLetter || first.isNumber
-                    {
-                        Mark.set(
-                            mark: markChar,
-                            isVisual: appState.isVisual,
-                            startCGXPoint: Double(currentCGPoint.x),
-                            startCGYPoint: Double(currentCGPoint.y),
-                            endCGXPoint: Double(currentCGPoint.x),
-                            endCGYPoint: Double(currentCGPoint.y),
-                            sessionId: appState.currentSession?.id ?? 1
-                        )
-                        MarksMenu.shared.refresh()
-                        ToastManager.shared.show("Mark '\(markChar)' set")
-                        appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        //INFO: Return early here to avoid the mark char being processed by the normal flow below, which could cause unintended behavior (eg.. "mm" would trigger both the mark setting and the "go to start of line" behavior)
-                        return
-                    }
-                    switch asciiKey {
-                    case " ":
-                        guard
-                            event.modifierFlags.rawValue == 256
-                                || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .shift, .capsLock,
-                                ])
-                        else {
-                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        }
-                        //INFO: This is one of the few speical times when operationCount is transfered over to a pending operation
-                        //To do stuff like 10-space-d or even space-10-d to Scroll Down 10 times
-                        appState.mode = .normal(
-                            currentPendingOperation: .special,
-                            operationCountAsString: operationCountAsString)
-                        return
-                    //TODO: Add "$", "^ : where it will go to the most left/right of the current
-                    //focused window", "g$" for most right, hjkl, counters,
-                    case "F":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        appState.gridDivisions =
-                            operationCount > 1 ? min(appState.maxGridDivisions, Int(operationCount)) : 2
-                        debug(
-                            "Entering find mode with gridDivisions = \(appState.gridDivisions) based on operationCount = \(operationCount)"
-                        )
-                        appState.mode = .find(
-                            currentPendingOperation: nil,
-                            findState: NeomouseType.FindState(),
-                            isQuickFind: true
-                        )
-                        HelpDialog.shared.hide()
-                        CommandLine.shared.hide()
-                        GridOverlay.shared.passAppState(state: appState)
-                        GridOverlay.shared.showGrid()
-                        ToastManager.shared.show(
-                            "Find Mode")
-                        return
-                    case "f":
-                        //INFO: 256 means no modifier is pressed, do not use .isEmpty method
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        appState.mode = .find(
-                            currentPendingOperation: nil,
-                            findState: NeomouseType.FindState(),
-                            isQuickFind: false
-                        )
-                        HelpDialog.shared.hide()
-                        CommandLine.shared.hide()
-                        GridOverlay.shared.passAppState(state: appState)
-                        GridOverlay.shared.showGrid()
-                        ToastManager.shared.show(
-                            "Find Mode")
-                        return
-                    case "H", "J", "K", "L":
-                        // Switch-expression (Swift 5.9+) needs the explicit
-                        // `NeomouseType.Direction?` annotation so the `nil`
-                        // default unifies with the `.left/.down/.up/.right`
-                        // cases under the optional type. Don't wrap this in a
-                        // closure — that flips the parser into statement-mode
-                        // and the cases become Void, which is what made `nil`
-                        // unassignable in the earlier version.
-                        let pendingDirection: NeomouseType.Direction? =
-                            switch asciiKey {
-                            case "H": .right  // swapped to match the intuitive direction of the scroll
-                            case "J": .down
-                            case "K": .up
-                            case "L": .left  // swapped to match the intuitive direction of the scroll
-                            default: nil
-                            }
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ]),
-                            let direction = pendingDirection
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        Gesture.scroll(
-                            direction: direction,
-                            at: currentCGPoint,
-                            stepValue: Int32(operationCount) * 30,  //TODO move to config
-                            incrementsPerGesture: 1
-                        )
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    // INFO: Here starts VIM-like motions on the cursor
-                    //TODO check that if the operation except the lastIndex are only nums
-                    case "h", "j", "k", "l":
-                        guard
-                            event.modifierFlags.rawValue == 256,
-                            let key = asciiKey,
-                            let direction = HJKLDirection(key)
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        // Step = one cell of the rows×cols grid laid over
-                        // the inset-adjusted screen. Same formula as
-                        // NumbersOverlay → cursor lands exactly on cell
-                        // boundaries every `j`/`k`/`h`/`l` press.
-                        let _hjklUsable = CGRect(
-                            x: appState.gridInset,
-                            y: appState.gridInset,
-                            width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                            height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                        )
-                        let _hjklGrid = appState.resolvedGrid(usable: _hjklUsable)
-                        let _hjklStepX = _hjklUsable.width / CGFloat(_hjklGrid.cols)
-                        let _hjklStepY = _hjklUsable.height / CGFloat(_hjklGrid.rows)
-                        let delta = direction.delta(
-                            stepX: _hjklStepX,
-                            stepY: _hjklStepY,
-                            count: operationCount)
-                        Mouse.moveRelative(
-                            x: delta.dx, y: delta.dy, clampToScreen: true
-                        )
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "'":  //goToMark
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .goToMark,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "`":  //goToMarkExactState
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .goToMarkExactState,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "\"":
-                        guard asciiKeyBase == "\"" else {
-                            debug(
-                                "Expected '\"' for register operations, got \(String(describing: asciiKeyBase))"
-                            )
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .goToRegister,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "?":
-                        guard asciiKeyBase == "?" else {
-                            debug(
-                                "Expected '?' for help, got \(String(describing: asciiKeyBase))"
-                            )
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        HelpDialog.shared.toggle()
-                        appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        break
-                    case ":":
-                        guard asciiKeyBase == ":" else {
-                            debug(
-                                "Expected ':' for command line, got \(String(describing: asciiKeyBase))"
-                            )
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        HelpDialog.shared.hide()
-                        appState.mode = .command(command: "", suggestionIndex: nil)
-                        CommandLine.shared.passAppState(state: appState)
-                        CommandLine.shared.toggle()
-                        break
-                    case "s":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        NumbersOverlay.shared.snapCursor()
-                        break
-                    // INFO: No need to do modifierFlags checks for captizalized chars, as a
-                    //modifierFlag will trigger the lowercase char equivalent
-                    case "G":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        if operationCount > 1 {
-                            debug(
-                                "G - with operationCount=\(operationCount) > 1, operation G, same as [count]gg"
-                            )
-                            let _ggUsable = CGRect(
-                                x: appState.gridInset,
-                                y: appState.gridInset,
-                                width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                                height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                            )
-                            let target = MotionTarget.toLineCount(
-                                localX: localCGPoint.x,
-                                screenHeight: currentScreenSize.height,
-                                gridInset: appState.gridInset,
-                                rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
-                                count: operationCount)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        } else {
-                            debug("G - with operationCount 1, go to bottom of the screen")
-                            let target = MotionTarget.bottom(
-                                localX: localCGPoint.x,
-                                screenHeight: currentScreenSize.height,
-                                gridInset: appState.gridInset)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "g":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        if currentPendingNormalOperation == .none {
-                            appState.mode = .normal(
-                                currentPendingOperation: .g,
-                                operationCountAsString: operationCountAsString
-                            )
-                            break
-                        }
-                        break
-                    case "|":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        if operationCount > 1 {
-                            debug(
-                                "| - with operationCount=\(operationCount) > 1"
-                            )
-                            let _usable = CGRect(
-                                x: appState.gridInset,
-                                y: appState.gridInset,
-                                width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                                height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                            )
-                            let target = MotionTarget.toColumnCount(
-                                localY: localCGPoint.y,
-                                screenWidth: currentScreenSize.width,
-                                gridInset: appState.gridInset,
-                                columnsOnScreen: appState.resolvedGrid(usable: _usable).cols,
-                                count: operationCount)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        } else {
-                            debug("| - with operationCount 1, go to left of the screen")
-                            let target = MotionTarget.leftEdge(
-                                localY: localCGPoint.y,
-                                gridInset: appState.gridInset)
-                            Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        }
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "V":
-                        appState.isVisual.toggle()
-                        guard appState.isVisual,
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            CoreOperations.exitVisualState(
-                                appState: appState,
-                                visualHighlightOverlay:
-                                    VisualHighlightOverlay.shared)
-                            return
-                        }
-                        // Line height = one row of the inset-adjusted grid,
-                        // same as hjkl + NumbersOverlay.
-                        let _vUsable = CGRect(
-                            x: appState.gridInset,
-                            y: appState.gridInset,
-                            width: max(0, currentScreenSize.width - 2 * appState.gridInset),
-                            height: max(0, currentScreenSize.height - 2 * appState.gridInset)
-                        )
-                        let lineHeight =
-                            _vUsable.height
-                            / CGFloat(appState.resolvedGrid(usable: _vUsable).rows)
-                        let startCGPoint = CGPoint(
-                            x: currentDisplayBounds.origin.x + appState.gridInset,
-                            y: currentCGPoint.y)
-                        let endCGPoint = CGPoint(
-                            x: currentDisplayBounds.origin.x + currentScreenSize.width
-                                - appState.gridInset,
-                            y: currentCGPoint.y + lineHeight)
-                        Mouse.moveToGlobal(x: startCGPoint.x, y: startCGPoint.y)
-                        // Mouse.down(.left, at: startCGPoint)
-                        Mouse.moveToGlobal(x: endCGPoint.x, y: endCGPoint.y)
-                        appState.startCGXPoint = startCGPoint.x
-                        appState.startCGYPoint = startCGPoint.y
-                        appState.endCGXPoint = endCGPoint.x
-                        appState.endCGYPoint = endCGPoint.y
-                        VisualHighlightOverlay.shared.passAppState(state: appState)
-                        break
-                    case "v":
-                        CoreOperations.toggleVisualState(
-                            event: event, appState: appState,
-                            currentPendingNormalOperation: currentPendingNormalOperation,
-                            currentCGPoint: currentCGPoint,
-                            visualHighlightOverlay: VisualHighlightOverlay.shared
-                        )
-                        break
-                    case "y", "Y":
-                        CoreOperations.normalYank(
-                            event: event, currentSession: currentSession, appState: appState)
-                        break
-                    case "o":
-                        guard appState.isVisual,
-                            event.modifierFlags.rawValue == 256,
-                            let sx = appState.startCGXPoint,
-                            let sy = appState.startCGYPoint,
-                            let ex = appState.endCGXPoint,
-                            let ey = appState.endCGYPoint
-                        else {
-                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        }
-                        // Pure anchor↔cursor swap. The mouse monitor is the single source
-                        // of truth for endCG* — after the cursor warp dispatches, it'll
-                        // overwrite endCG* with the cursor's new position (= old start),
-                        // which matches what we set here.
-                        appState.startCGXPoint = ex
-                        appState.startCGYPoint = ey
-                        appState.endCGXPoint = sx
-                        appState.endCGYPoint = sy
-                        Mouse.moveToGlobal(x: sx, y: sy)
-                        appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        break
-                    //Capital O
-                    case "O":
-                        guard appState.isVisual,
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ]),
-                            let sx = appState.startCGXPoint,
-                            let sy = appState.startCGYPoint,
-                            let ex = appState.endCGXPoint,
-                            let ey = appState.endCGYPoint
-                        else {
-                            return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        }
-                        appState.startCGXPoint = sx
-                        appState.startCGYPoint = ey
-                        appState.endCGXPoint = ex
-                        appState.endCGYPoint = sy
-                        Mouse.moveToGlobal(x: ex, y: sy)
-                        appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        break
-                    case "M":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        let target = MotionTarget.verticalMiddle(
-                            localX: localCGPoint.x,
-                            screenHeight: currentScreenSize.height)
-                        Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "m":
-                        guard event.modifierFlags.rawValue == 256, currentPendingNormalOperation == .none else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        // First press: arm "m" so the next key becomes the mark name.
-                        // The actual addMark call lives at the top of the outer
-                        // `switch event.characters` so it can intercept any a–z/0–9.
-                        appState.mode = .normal(currentPendingOperation: .setMark, operationCountAsString: nil)
-                        break
-                    //INFO: Instead of vim's replace single char, this is the rotate gesture
-                    case "r":
-                        guard event.modifierFlags.rawValue == 256 else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        Gesture.rotate(
-                            degrees: appState.degreesToRotate, at: currentCGPoint,
-                            incrementsPerGesture:
-                                appState.incrementsPerGesture)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "R":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        Gesture.rotate(
-                            degrees: -appState.degreesToRotate, at: currentCGPoint,
-                            incrementsPerGesture:
-                                appState.incrementsPerGesture)
-                        // Always reset pendingOperation as to reset the operationCount
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    // TODO change to current focused app and add in for g$
-                    case "$":
-                        let target = MotionTarget.rightEdge(
-                            localY: localCGPoint.y,
-                            screenWidth: currentScreenSize.width,
-                            gridInset: appState.gridInset)
-                        Mouse.moveToScreenLocal(x: target.x, y: target.y)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "+":
-                        Gesture.pinchZoom(
-                            .in, at: currentCGPoint,
-                            stepValue: operationCount * appState.zoomStepValue,
-                            incrementsPerGesture: appState.incrementsPerGesture)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "-":
-                        Gesture.pinchZoom(
-                            .out, at: currentCGPoint,
-                            stepValue: operationCount * appState.zoomStepValue,
-                            incrementsPerGesture: appState.incrementsPerGesture)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    case "S":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                .shift, .capsLock,
-                            ])
-                        else {
-                            return appState.mode = .normal(
-                                currentPendingOperation: .none,
-                                operationCountAsString: nil
-                            )
-                        }
-                        Gesture.smartMagnify(at: currentCGPoint)
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        break
-                    default: break
-                    }
+                case .normal(let op, let countString):
+                    NeoMouse.handleNormalMode(
+                        ctx: ctx,
+                        currentPendingNormalOperation: op,
+                        operationCountAsString: countString
+                    )
                 case .find:
-                    switch event.keyCode {
-                    case charToKeyCodeMap["Esc"]:
-                        guard event.modifierFlags.rawValue == 256 else {
-                            break
-                        }
-                        appState.gridDivisions = Config.Grid.defaultDivisions
-                        NeoMouse.enterNormalMode(appState: appState)
-                        break
-                    default: break
-                    }
-                    switch asciiKey {
-                    case "e":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                                == .command
-                        else {
-                            return NeoMouse.executeFindModeOperation(
-                                event: event, appState: appState,
-                                currentScreenSize:
-                                    currentScreenSize)
-                        }
-                        break
-                    default:
-                        NeoMouse.executeFindModeOperation(
-                            event: event, appState: appState, currentScreenSize: currentScreenSize)
-                        break
-                    }
-                case .command(let currentCommand, let suggestionIndex):
-                    // Append a typed character to the command buffer. Hoisted out of
-                    // the n/N case so p/P and the default branch can call it too.
-                    // Writes back to appState.mode so @Published fires and the
-                    // SwiftUI CommandLineView redraws; typing resets the suggestion
-                    // cycle.
-                    //TODO move to neomouseUtils
-                    func appendCharacterToCommand() {
-                        // ASCII-canonical so :commands resolve on Cyrillic /
-                        // Greek / IME layouts. Users who actually want to type
-                        // non-ASCII content into the command line aren't a
-                        // case we support today (commands are English-only).
-                        guard let character = asciiKey else { return }
-                        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                        guard !mods.contains(.command),
-                            !mods.contains(.control),
-                            !mods.contains(.option)
-                        else { return }
-                        appState.mode = .command(command: currentCommand + character, suggestionIndex: nil)
-                    }
-                    switch event.keyCode {
-                    case charToKeyCodeMap["Esc"]:
-                        guard event.modifierFlags.rawValue == 256 else {
-                            break
-                        }
-                        HelpDialog.shared.hide()
-                        CommandLine.shared.hide()
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
-                    case charToKeyCodeMap["Return"], charToKeyCodeMap["Enter"]:
-                        if let suggestionIndex {
-                            CommandLine.shared.executeSuggestionCommand(at: suggestionIndex)
-                            CommandLine.shared.hide()
-                        } else {
-                            debug("execute command: \(currentCommand)")
-
-                            CommandLine.shared.executeCommand(at: currentCommand)
-                            CommandLine.shared.hide()
-                            appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                        }
-                        return
-                    case charToKeyCodeMap["Backspace"], charToKeyCodeMap["Delete"]:
-                        appState.mode = .command(
-                            command: String(currentCommand.dropLast()),
-                            suggestionIndex: nil
-                        )
-                        return
-                    case charToKeyCodeMap["Tab"]:
-                        // Single source of truth: ask CommandLine for the
-                        // current filtered list (same code path the view +
-                        // executor use).
-                        let matches = CommandLine.shared.filtered
-                        guard !matches.isEmpty else { return }
-                        let isReverse = event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .shift
-                        let next: Int
-                        if let currentSuggestionIndex = suggestionIndex {
-                            next =
-                                isReverse
-                                ? (currentSuggestionIndex - 1 + matches.count) % matches.count
-                                : (currentSuggestionIndex + 1) % matches.count
-                        } else {
-                            next = isReverse ? matches.count - 1 : 0
-                        }
-                        appState.mode = .command(command: currentCommand, suggestionIndex: next)
-                        return
-                    default:
-                        break
-                    }
-                    switch asciiKeyBase {
-                    //Same fn as Tab
-                    case "n", "N":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
-                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .control, .shift, .capsLock,
-                                ])
-                        else {
-                            return appendCharacterToCommand()
-                        }
-                        let matches = CommandLine.shared.filtered
-                        guard !matches.isEmpty else { return }
-                        let next: Int
-                        if let currentSuggestionIndex = suggestionIndex {
-                            next = (currentSuggestionIndex + 1) % matches.count
-                        } else {
-                            next = 0
-                        }
-                        appState.mode = .command(command: currentCommand, suggestionIndex: next)
-                        return
-                    //Same fn as Shift + Tab
-                    case "p", "P":
-                        guard
-                            event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.control)
-                                && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                                    .control, .shift, .capsLock,
-                                ])
-                        else {
-                            return appendCharacterToCommand()
-                        }
-                        let matches = CommandLine.shared.filtered
-                        guard !matches.isEmpty else { return }
-                        let next: Int
-                        if let currentSuggestionIndex = suggestionIndex {
-                            next = (currentSuggestionIndex - 1 + matches.count) % matches.count
-                        } else {
-                            next = matches.count - 1
-                        }
-                        appState.mode = .command(command: currentCommand, suggestionIndex: next)
-                        return
-                    // For all other Plain key: append. Allow Shift for capitals, reject
-                    // Cmd / Ctrl / Opt chords (let those flow to the OS).
-                    default:
-                        return appendCharacterToCommand()
-                    }
+                    NeoMouse.handleFindMode(ctx: ctx)
+                case .command(let command, let suggestionIndex):
+                    NeoMouse.handleCommandMode(
+                        ctx: ctx, currentCommand: command, suggestionIndex: suggestionIndex
+                    )
                 case .menu(let window):
-                    // Esc closes whichever menu is on-screen and returns to
-                    // normal mode. Hide is idempotent on the inactive one.
-                    if event.keyCode == charToKeyCodeMap["Esc"] {
-                        guard event.modifierFlags.rawValue == 256 else { break }
-                        MarksMenu.shared.hide()
-                        RegisterMenu.shared.hide()
-                        appState.mode = .normal(
-                            currentPendingOperation: .none,
-                            operationCountAsString: nil
-                        )
-                        return
-                    }
-                    switch window {
-                    case .marks:
-                        switch event.keyCode {
-                        case charToKeyCodeMap["UpArrow"]:
-                            MarksMenu.shared.selectPrev()
-                            return
-                        case charToKeyCodeMap["DownArrow"]:
-                            MarksMenu.shared.selectNext()
-                            return
-                        case charToKeyCodeMap["Return"], charToKeyCodeMap["Enter"]:
-                            MarksMenu.shared.activateSelected()
-                            return
-                        default:
-                            break
-                        }
-                    case .register:
-                        // Pasty-style horizontal layout: ← / → navigate, the
-                        // search bar accumulates printable chars + backspace.
-                        switch event.keyCode {
-                        case charToKeyCodeMap["LeftArrow"]:
-                            RegisterMenu.shared.selectPrev()
-                            return
-                        case charToKeyCodeMap["RightArrow"]:
-                            RegisterMenu.shared.selectNext()
-                            return
-                        case charToKeyCodeMap["Return"], charToKeyCodeMap["Enter"]:
-                            RegisterMenu.shared.activateSelected()
-                            return
-                        case charToKeyCodeMap["Backspace"], charToKeyCodeMap["Delete"]:
-                            RegisterMenu.shared.deleteLastSearchChar()
-                            return
-                        default:
-                            // Reject Cmd/Ctrl/Opt chords; allow Shift + Caps
-                            // for capitalisation. Same gate as command mode.
-                            guard
-                                event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                                    .isSubset(of: [.shift, .capsLock])
-                            else { break }
-                            guard let chars = event.characters, !chars.isEmpty else { break }
-                            // Skip C0 controls and DEL — arrow / function keys
-                            // emit non-printable scalars that would otherwise
-                            // sneak into the search string.
-                            guard
-                                chars.unicodeScalars.allSatisfy({
-                                    $0.value >= 0x20 && $0.value != 0x7F
-                                })
-                            else { break }
-                            RegisterMenu.shared.appendSearchChar(chars)
-                            return
-                        }
-                    }
+                    NeoMouse.handleMenuMode(ctx: ctx, window: window)
                 case .specialFind:
-                    // One-shot: Esc cancels; any keystroke that maps to a cell
-                    // in the dense 6×6 inner-character grid lands the mouse on
-                    // that cell's CG-global center via Mouse.moveToGlobal,
-                    // then exits to normal. Modifier chords are rejected so
-                    // Cmd-* / Ctrl-* keep flowing to the OS untouched.
-                    if event.keyCode == charToKeyCodeMap["Esc"] {
-                        guard event.modifierFlags.rawValue == 256 else { break }
-                        CursorSurroundedGridOverlay.shared.hide()
-                        Zoom.zoomOut()
-                        NeoMouse.enterNormalMode(appState: appState)
-                        return
-                    }
-                    guard
-                        event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                            .isSubset(of: [.shift, .capsLock])
-                    else { break }
-                    guard let keyChar = charToKeyCodeMap.keyChar(forKeyCode: event.keyCode) else {
-                        debug(".specialFind: no charToKeyCodeMap entry for keyCode \(event.keyCode)")
-                        return
-                    }
-                    guard
-                        let cellIndex = appState.findModeInnerGridDivisionCharacters.firstIndex(
-                            of: keyChar)
-                    else {
-                        debug(
-                            ".specialFind: '\(keyChar)' not in findModeInnerGridDivisionCharacters")
-                        return
-                    }
-                    let divisions = CursorSurroundedGridOverlay.shared.currentDivisions
-                    guard cellIndex < divisions * divisions else {
-                        debug(
-                            ".specialFind: cellIndex \(cellIndex) exceeds grid capacity \(divisions * divisions)"
-                        )
-                        return
-                    }
-                    let col = cellIndex % divisions
-                    let row = cellIndex / divisions
-                    guard
-                        let target = CursorSurroundedGridOverlay.shared.cellCenterCG(
-                            col: col, row: row)
-                    else {
-                        debug(".specialFind: cellCenterCG returned nil — overlay not shown?")
-                        return
-                    }
-                    Mouse.moveToGlobal(x: target.x, y: target.y)
-                    Zoom.zoomOut()
-                    CursorSurroundedGridOverlay.shared.hide()
-                    // Widen the zoom viewport back to the full display once
-                    // the cursor has landed. No-op when zoom isn't active.
-                    if let displayID = Screen.activeDisplays().first(where: {
-                        CGDisplayBounds($0).contains(target)
-                    }) {
-                        Zoom.focus(on: CGDisplayBounds(displayID))
-                    }
-                    NeoMouse.enterNormalMode(appState: appState)
-                    return
+                    NeoMouse.handleSpecialFindMode(ctx: ctx)
                 }
 
                 //INFO: after every non-integer keypress, excluding 0 which can be both a command and a count, we reset the operationCountAsString to nil to reset the count for the next operation
@@ -2027,7 +786,15 @@ struct NeoMouse: App {
             GridOverlay.shared.passAppState(state: appState)
             // Second keypress
         } else {
-            // Normal find mode flow
+            // Normal find mode flow — second keypress, picking the inner cell.
+            // `pendingGridDivisionIndex` must already be set (the outer cell
+            // was selected on the first keypress). Bail out rather than crash
+            // if the state somehow got out of sync.
+            guard let outerIndex = findState.pendingGridDivisionIndex else {
+                return debug(
+                    "find inner-grid keypress arrived without a pendingGridDivisionIndex; ignoring"
+                )
+            }
             guard
                 let innerGridDivisionCharactersIndex =
                     appState.findModeInnerGridDivisionCharacters.firstIndex(
@@ -2050,7 +817,7 @@ struct NeoMouse: App {
             )
 
             let updatedFindState = NeomouseType.FindState(
-                pendingGridDivisionIndex: findState.pendingGridDivisionIndex,
+                pendingGridDivisionIndex: outerIndex,
                 pendingInnerGridDivisionIndex: innerGridDivisionCharactersIndex
             )
 
@@ -2059,16 +826,9 @@ struct NeoMouse: App {
                 findState: updatedFindState,
                 isQuickFind: false
             )
-            // findState.pendingInnerGridDivisionIndex =
-            //     innerGridDivisionCharactersIndex
-            // currentPendingOperation.append(keyCodeAsChar)
 
-            let col =
-                findState.pendingGridDivisionIndex!
-                % appState.gridDivisions
-            let row =
-                findState.pendingGridDivisionIndex!
-                / appState.gridDivisions
+            let col = outerIndex % appState.gridDivisions
+            let row = outerIndex / appState.gridDivisions
             let innerCol =
                 innerGridDivisionCharactersIndex
                 // findState.pendingInnerGridDivisionIndex!

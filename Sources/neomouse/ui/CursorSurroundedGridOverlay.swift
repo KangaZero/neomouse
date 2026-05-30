@@ -116,20 +116,10 @@ final class CursorSurroundedGridOverlay {
         boxTopLeftCG = cgTopLeft
 
         if window == nil {
-            let win = NSWindow(
+            window = OverlayWindow.makeFullscreenClickThrough(
                 contentRect: frame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
+                rootView: CursorSurroundedGridOverlayView(state: appState)
             )
-            win.isOpaque = false
-            win.backgroundColor = .clear
-            win.level = .screenSaver  // matches GridOverlay
-            win.ignoresMouseEvents = true
-            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            win.contentView = NSHostingView(
-                rootView: CursorSurroundedGridOverlayView(state: appState))
-            window = win
         }
         window?.setFrame(frame, display: true)
         window?.orderFrontRegardless()

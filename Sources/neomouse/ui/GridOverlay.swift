@@ -43,19 +43,10 @@ final class GridOverlay {
                 debug("Should not happen: not in find mode within GridOverlayView")
         }
         if window == nil {
-            let win = NSWindow(
+            window = OverlayWindow.makeFullscreenClickThrough(
                 contentRect: screen.frame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
+                rootView: GridOverlayView(state: appState)
             )
-            win.isOpaque = false
-            win.backgroundColor = .clear
-            win.level = .screenSaver  // 101
-            win.ignoresMouseEvents = true
-            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            win.contentView = NSHostingView(rootView: GridOverlayView(state: appState))
-            window = win
         }
         window?.setFrame(screen.frame, display: true)
         window?.orderFrontRegardless()

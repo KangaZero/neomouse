@@ -207,6 +207,11 @@
           "enum": ["disabled", "normal", "find", "command", "menu"],
           "default": "normal",
           "description": "Which mode neomouse boots into. 'disabled' leaves it dormant until Cmd-E activates."
+        },
+        "is_show_key_cast": {
+          "type": "boolean",
+          "default": true,
+          "description": "Vim-style showcmd. When true, a small floating pill above the screen displays the partial pending normal-mode operation (e.g. 'g', '5', 'm', '5gg')."
         }
       }
     },

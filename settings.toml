@@ -52,6 +52,11 @@ new_session_on_open = true
 # Which mode neomouse boots into. One of: "disabled", "normal", "find",
 # "command", "menu". "disabled" leaves neomouse dormant until Cmd-E activates.
 mode_on_start = "normal"
+# Vim-style showcmd. When true, a small floating pill above the screen
+# displays the partial pending operation in normal mode (e.g. "g" after
+# pressing g, "5" after typing 5, "5gg" mid-sequence). Hidden when no
+# operation is pending.
+is_show_key_cast = true
 
 # ---------------------------------------------------------------------------
 # [theme.*] — per-element visual overrides
