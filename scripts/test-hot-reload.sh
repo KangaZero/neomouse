@@ -150,7 +150,37 @@ run_scenario \
   "sed -i.bak -E 's/^divisions[[:space:]]*=[[:space:]]*\"not_an_int\"/divisions = 5/' '$SETTINGS_PATH' && rm -f '$SETTINGS_PATH.bak'" \
   "SettingsWatcher: reloaded"
 
-step "Scenario 5 — app stayed alive throughout"
+step "Scenario 5 — unknown key in [theme.toast] should be rejected with the list of valid keys"
+# Append a typoed key inside the existing [theme.toast] section. The strict
+# decoder must surface "unknown key(s) in [theme.toast]: \"backgrond\". Valid
+# keys: anchor, background, corner_radius, height, outer_padding, padding_x,
+# padding_y, text_color, text_font, width, x_offset, y_offset".
+run_scenario \
+  "add bogus key backgrond to [theme.toast]" \
+  "awk '/^\\[theme.toast\\]/ {print; print \"backgrond = \\\"#ff0000\\\"\"; next} {print}' '$SETTINGS_PATH' > '$SETTINGS_PATH.new' && mv '$SETTINGS_PATH.new' '$SETTINGS_PATH'" \
+  "unknown key.*in \\[theme.toast\\].*backgrond.*Valid keys"
+
+step "Scenario 6 — remove the typoed key, app reloads cleanly"
+run_scenario \
+  "drop the bogus backgrond line" \
+  "sed -i.bak -E '/^backgrond[[:space:]]*=/d' '$SETTINGS_PATH' && rm -f '$SETTINGS_PATH.bak'" \
+  "SettingsWatcher: reloaded"
+
+step "Scenario 7 — unknown enum value should be rejected with the list of valid values"
+# Change [theme.numbers_overlay] direction = "left" → "leftt". Watcher must
+# log "unknown direction value \"leftt\"; expected one of: left, right".
+run_scenario \
+  "change theme.numbers_overlay.direction to invalid \"leftt\"" \
+  "sed -i.bak -E 's/^direction[[:space:]]*=[[:space:]]*\"left\"/direction = \"leftt\"/' '$SETTINGS_PATH' && rm -f '$SETTINGS_PATH.bak'" \
+  "unknown direction value.*leftt.*expected one of"
+
+step "Scenario 8 — restore direction, app reloads cleanly again"
+run_scenario \
+  "revert theme.numbers_overlay.direction to \"left\"" \
+  "sed -i.bak -E 's/^direction[[:space:]]*=[[:space:]]*\"leftt\"/direction = \"left\"/' '$SETTINGS_PATH' && rm -f '$SETTINGS_PATH.bak'" \
+  "SettingsWatcher: reloaded"
+
+step "Scenario 9 — app stayed alive throughout"
 # pgrep uses BRE by default; the substring below is common to both the
 # production (/Applications/NeoMouseTest.app/Contents/MacOS/neomouse) and
 # dev (.build/debug/neomouse.app/Contents/MacOS/neomouse) layouts. Capture

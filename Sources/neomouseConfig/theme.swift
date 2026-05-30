@@ -70,12 +70,14 @@ extension Config {
             self.keyCast = keyCast
         }
 
-        private enum CodingKeys: String, CodingKey {
+        private enum CodingKeys: String, CodingKey, CaseIterable {
             case grid, numbersOverlay, commandLine, marksMenu, registerMenu
             case helpDialog, visualHighlight, toast, keyCast
         }
 
         public init(from decoder: any Decoder) throws {
+            try validateKnownKeys(
+                decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme")
             let c = try decoder.container(keyedBy: CodingKeys.self)
             grid = try c.decodeIfPresent(GridTheme.self, forKey: .grid) ?? GridTheme()
             numbersOverlay =
@@ -177,7 +179,7 @@ public struct ThemeFont: Decodable, Sendable, Equatable {
     public let weight: Weight
     public let design: Design
 
-    public enum Weight: String, Decodable, Sendable {
+    public enum Weight: String, Decodable, Sendable, CaseIterable {
         case ultraLight = "ultra_light"
         case thin
         case light
@@ -189,7 +191,7 @@ public struct ThemeFont: Decodable, Sendable, Equatable {
         case black
     }
 
-    public enum Design: String, Decodable, Sendable {
+    public enum Design: String, Decodable, Sendable, CaseIterable {
         case `default`
         case monospaced
         case serif
@@ -208,11 +210,13 @@ public struct ThemeFont: Decodable, Sendable, Equatable {
         self.design = design
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case family, size, weight, design
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "font")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         family = try c.decodeIfPresent(String.self, forKey: .family) ?? ""
         size = try tomlDouble(c, forKey: .size, default: 13)
@@ -224,7 +228,7 @@ public struct ThemeFont: Decodable, Sendable, Equatable {
 /// Where a transient overlay (toast, command line, key cast, etc.) anchors
 /// itself on the active screen's visible frame. Combine with `offsetX` /
 /// `offsetY` (in points) for fine tuning.
-public enum ThemeAnchor: String, Decodable, Sendable {
+public enum ThemeAnchor: String, Decodable, Sendable, CaseIterable {
     case top
     case topLeft = "top_left"
     case topRight = "top_right"
@@ -238,13 +242,13 @@ public enum ThemeAnchor: String, Decodable, Sendable {
 
 /// Side of the screen for the NumbersOverlay gutter (and a future toggle
 /// for the column strip).
-public enum ThemeDirection: String, Decodable, Sendable {
+public enum ThemeDirection: String, Decodable, Sendable, CaseIterable {
     case left
     case right
 }
 
 /// SwiftUI Material flavor — picks the level of background blur on a panel.
-public enum ThemeMaterial: String, Decodable, Sendable {
+public enum ThemeMaterial: String, Decodable, Sendable, CaseIterable {
     case ultraThin = "ultra_thin"
     case thin
     case regular
@@ -308,13 +312,15 @@ public struct GridTheme: Decodable, Sendable {
         self.cursorSurroundedLabelFont = cursorSurroundedLabelFont
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case background, outerLineColor, outerLabelColor, outerLabelFont
         case innerLineColor, innerFaintLineColor, innerLabelColor, innerLabelFont
         case cursorSurroundedBoxSize, cursorSurroundedDivisions, cursorSurroundedLabelFont
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.grid")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = GridTheme()
         background = try c.decodeIfPresent(ThemeColor.self, forKey: .background) ?? d.background
@@ -380,12 +386,14 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
         self.columnStripHeight = columnStripHeight
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case direction, gutterBackground, cursorLineHighlight, cursorColumnHighlight
         case cursorTextColor, textColor, font, gutterWidth, columnStripHeight
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.numbers_overlay")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = NumbersOverlayTheme()
         direction = try c.decodeIfPresent(ThemeDirection.self, forKey: .direction) ?? d.direction
@@ -452,13 +460,15 @@ public struct CommandLineTheme: Decodable, Sendable {
         self.material = material
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case anchor, xOffset, yOffset, width, height, cornerRadius
         case textFont, textColor, prefixColor
         case suggestionFont, suggestionTextColor, suggestionHighlight, material
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.command_line")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = CommandLineTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
@@ -524,13 +534,15 @@ public struct MarksMenuTheme: Decodable, Sendable {
         self.rowPaddingY = rowPaddingY
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case anchor, width, height, cornerRadius, material
         case headerFont, markLabelFont, cellFont, emptyMessageFont
         case selectedRowBackground, rowPaddingX, rowPaddingY
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.marks_menu")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = MarksMenuTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
@@ -621,7 +633,7 @@ public struct RegisterMenuTheme: Decodable, Sendable {
         self.contentBackground = contentBackground
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case anchor, width, height, cornerRadius, material
         case cardWidth, cardHeight, cardPaddingX, cardPaddingY, viewPadding
         case searchFont, appNameFont, registerLabelFont, cardTextFont, badgeFont
@@ -630,6 +642,8 @@ public struct RegisterMenuTheme: Decodable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.register_menu")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = RegisterMenuTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
@@ -699,12 +713,14 @@ public struct HelpDialogTheme: Decodable, Sendable {
         self.descriptionColor = descriptionColor
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case anchor, width, height, padding
         case headerColor, headerFont, keybindFont, descriptionColor
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.help_dialog")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = HelpDialogTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
@@ -728,9 +744,11 @@ public struct VisualHighlightTheme: Decodable, Sendable {
         self.fill = fill
     }
 
-    private enum CodingKeys: String, CodingKey { case fill }
+    private enum CodingKeys: String, CodingKey, CaseIterable { case fill }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.visual_highlight")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = VisualHighlightTheme()
         fill = try c.decodeIfPresent(ThemeColor.self, forKey: .fill) ?? d.fill
@@ -779,13 +797,15 @@ public struct ToastTheme: Decodable, Sendable {
         self.textFont = textFont
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case anchor, xOffset, yOffset, width, height, cornerRadius
         case paddingX, paddingY, outerPadding
         case background, textColor, textFont
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.toast")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = ToastTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
@@ -849,12 +869,14 @@ public struct KeyCastTheme: Decodable, Sendable {
         self.textFont = textFont
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case anchor, xOffset, yOffset, width, height, cornerRadius, paddingX, paddingY
         case background, textColor, borderColor, shadowColor, textFont
     }
 
     public init(from decoder: any Decoder) throws {
+        try validateKnownKeys(
+            decoder: decoder, keyedBy: CodingKeys.self, sectionName: "theme.key_cast")
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = KeyCastTheme()
         anchor = try c.decodeIfPresent(ThemeAnchor.self, forKey: .anchor) ?? d.anchor
@@ -872,5 +894,46 @@ public struct KeyCastTheme: Decodable, Sendable {
         shadowColor =
             try c.decodeIfPresent(ThemeColor.self, forKey: .shadowColor) ?? d.shadowColor
         textFont = try c.decodeIfPresent(ThemeFont.self, forKey: .textFont) ?? d.textFont
+    }
+}
+
+// MARK: - Friendly decode for theme enums
+//
+// Each of the theme's enum types overrides the auto-synthesized
+// `init(from:)` with one that throws a `DecodingError` whose
+// `debugDescription` lists every valid raw value. That message bubbles all
+// the way out to the user via `SettingsWatcher`'s "Reload failed: …"
+// toast — so a typo like `direction = "leftt"` produces a usable hint
+// ("unknown direction value \"leftt\"; expected one of: left, right")
+// instead of TOMLDecoder's terse "Cannot initialize ThemeDirection from
+// invalid String value".
+
+extension ThemeFont.Weight {
+    public init(from decoder: any Decoder) throws {
+        self = try decodeFriendlyEnum(Self.self, fieldName: "weight", decoder: decoder)
+    }
+}
+
+extension ThemeFont.Design {
+    public init(from decoder: any Decoder) throws {
+        self = try decodeFriendlyEnum(Self.self, fieldName: "design", decoder: decoder)
+    }
+}
+
+extension ThemeAnchor {
+    public init(from decoder: any Decoder) throws {
+        self = try decodeFriendlyEnum(Self.self, fieldName: "anchor", decoder: decoder)
+    }
+}
+
+extension ThemeDirection {
+    public init(from decoder: any Decoder) throws {
+        self = try decodeFriendlyEnum(Self.self, fieldName: "direction", decoder: decoder)
+    }
+}
+
+extension ThemeMaterial {
+    public init(from decoder: any Decoder) throws {
+        self = try decodeFriendlyEnum(Self.self, fieldName: "material", decoder: decoder)
     }
 }
