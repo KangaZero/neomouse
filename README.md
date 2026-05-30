@@ -118,18 +118,23 @@ curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neo
 # Verify the download
 shasum -a 256 -c "neomouse-${VERSION}-macos-arm64.tar.gz.sha256"
 
-# Extract
+# Extract — produces neomouse.app/ in the current directory
 tar -xzf "neomouse-${VERSION}-macos-arm64.tar.gz"
 
 # Clear macOS download quarantine (only needed on the manual path)
-xattr -dr com.apple.quarantine ./neomouse
+xattr -dr com.apple.quarantine ./neomouse.app
 
-# Run
-./neomouse
+# Launch — any of these works:
+open ./neomouse.app                       # standard
+./neomouse.app/Contents/MacOS/neomouse    # keeps stdout in your terminal
+# …or double-click neomouse.app in Finder.
 
-# Optional: put it on your PATH
-sudo install -m 755 ./neomouse /usr/local/bin/neomouse
+# Optional: move to /Applications, and symlink the inner binary onto PATH
+mv ./neomouse.app /Applications/
+sudo ln -sf /Applications/neomouse.app/Contents/MacOS/neomouse /usr/local/bin/neomouse
 ```
+
+> Why a `.app` bundle and not a bare binary: SwiftUI's `MenuBarExtra` status item only registers when LaunchServices can read `CFBundleIdentifier` from `.app/Contents/Info.plist`. A bare-binary install would launch the daemon but show no menu-bar icon.
 
 ## Development
 

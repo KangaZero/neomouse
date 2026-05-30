@@ -15,7 +15,7 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # macos-15's preinstalled Xcode ships Swift 6.2.x. Package.swift declares
       # swift-tools-version 6.3, so we install Swift 6.3 via swiftly (Apple's
@@ -28,13 +28,20 @@ jobs:
           echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
           ~/.swiftly/bin/swiftly install --use 6.3
 
+      - name: Install taplo (settings.toml schema validator)
+        run: brew install taplo
+
       - name: Show toolchain
         run: |
           sw_vers
           swift --version
+          taplo --version
 
       - name: Lint (swift format lint --strict)
         run: swift format lint --strict --recursive Sources Tests
+
+      - name: Check settings.toml against schema
+        run: taplo check settings.toml
 
       - name: Build (debug)
         run: swift build

@@ -63,11 +63,32 @@ BIN=".build/release/neomouse"
 [[ -x "$BIN" ]] || fail "Build did not produce $BIN"
 file "$BIN"
 
+# ---------- assemble .app wrapper ----------
+#
+# SwiftUI's MenuBarExtra status item only registers when LaunchServices can
+# read CFBundleIdentifier from .app/Contents/Info.plist — embedding the same
+# plist into the Mach-O's __TEXT,__info_plist section is not sufficient
+# (lsappinfo reports CFBundleIdentifier=NULL for bare-binary processes).
+# We ship a .app bundle so brew/nix/manual install paths all get a working
+# status item out of the box.
+
+step "Assembling neomouse.app"
+APP_STAGE="dist/build"
+APP_DIR="$APP_STAGE/neomouse.app"
+rm -rf "$APP_STAGE"
+mkdir -p "$APP_DIR/Contents/MacOS"
+cp Info.plist "$APP_DIR/Contents/Info.plist"
+cp "$BIN" "$APP_DIR/Contents/MacOS/neomouse"
+
 # ---------- sign ----------
 
-step "Ad-hoc signing"
-codesign --sign - --force --options runtime --timestamp=none "$BIN"
-codesign -dv "$BIN" 2>&1 | grep -E "Signature|Format" || true
+step "Ad-hoc signing the bundle"
+# --deep signs the nested binary plus the bundle itself. Ad-hoc (signer "-")
+# means no Developer ID — users still have to `xattr -dr com.apple.quarantine`
+# on a manual download to clear Gatekeeper; brew/nix install paths handle
+# this for the user.
+codesign --sign - --force --options runtime --timestamp=none --deep "$APP_DIR"
+codesign -dv "$APP_DIR" 2>&1 | grep -E "Signature|Format|Identifier" || true
 
 # ---------- package ----------
 
@@ -76,7 +97,9 @@ mkdir -p dist
 ARCHIVE_NAME="neomouse-${VERSION}-macos-arm64.tar.gz"
 ARCHIVE="dist/$ARCHIVE_NAME"
 
-tar -czf "$ARCHIVE" -C .build/release neomouse
+# Archive contains `neomouse.app/` at the top level (Contents/Info.plist,
+# Contents/MacOS/neomouse). Extraction lands the .app in the user's cwd.
+tar -czf "$ARCHIVE" -C "$APP_STAGE" "neomouse.app"
 (cd dist && shasum -a 256 "$ARCHIVE_NAME" | tee "$ARCHIVE_NAME.sha256")
 
 ls -la "$ARCHIVE" "$ARCHIVE.sha256"
@@ -114,11 +137,17 @@ cat >"$NOTES_FILE" <<EOF
    \`\`\`sh
    tar -xzf $ARCHIVE_NAME
    \`\`\`
-3. Remove macOS download quarantine (the binary is ad-hoc signed, not Developer ID signed):
+   This expands a \`neomouse.app\` bundle in your current directory.
+3. Remove macOS download quarantine (the bundle is ad-hoc signed, not Developer ID signed):
    \`\`\`sh
-   xattr -dr com.apple.quarantine ./neomouse
+   xattr -dr com.apple.quarantine ./neomouse.app
    \`\`\`
-4. Run \`./neomouse\` and grant Accessibility permissions on first launch.
+4. Launch it — any of these works:
+   \`\`\`sh
+   open ./neomouse.app                       # standard
+   ./neomouse.app/Contents/MacOS/neomouse    # keeps stdout in your terminal
+   \`\`\`
+   …or double-click \`neomouse.app\` in Finder. Grant Accessibility permissions on first launch (macOS will prompt). Optional: drag \`neomouse.app\` into \`/Applications\` to keep it around.
 
 ## Verify
 
@@ -132,7 +161,7 @@ $(git log --pretty=format:'- %s' "$RANGE")
 
 ## Platform
 
-macOS 13+, Apple Silicon only.
+macOS 14+, Apple Silicon only.
 EOF
 
 # ---------- gh release ----------

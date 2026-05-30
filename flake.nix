@@ -23,13 +23,21 @@
           hash = "sha256-wsXhazimEwuv90+33IdAHU+BwXIizKKrMRazwLqHefE=";
         };
 
-        # The tarball contains just the binary at the root, with no enclosing
-        # directory.
+        # The tarball expands to `neomouse.app/` at the root (Contents/
+        # Info.plist, Contents/MacOS/neomouse).
         sourceRoot = ".";
 
+        # SwiftUI's MenuBarExtra status item only registers when
+        # LaunchServices can read CFBundleIdentifier from a .app/Contents/
+        # Info.plist — a bare-binary install won't show the menu-bar icon.
+        # So we install the whole .app under $out/Applications/ and symlink
+        # the inner binary into $out/bin/ so `neomouse` is on PATH.
         installPhase = ''
           runHook preInstall
-          install -Dm755 neomouse "$out/bin/neomouse"
+          mkdir -p "$out/Applications"
+          cp -R neomouse.app "$out/Applications/"
+          mkdir -p "$out/bin"
+          ln -s "$out/Applications/neomouse.app/Contents/MacOS/neomouse" "$out/bin/neomouse"
           runHook postInstall
         '';
 
