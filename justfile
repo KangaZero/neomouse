@@ -61,6 +61,16 @@ fmt:
 check-config:
     taplo check settings.toml
 
+# Install the repo-root settings.toml as the user's default config at
+# ~/.config/neomouse/settings.toml. OVERWRITES any existing file there —
+# this is intentional, the recipe exists for resetting to known defaults.
+# Resolution order at runtime (first match wins): $NEOMOUSE_CONFIG,
+# ~/.config/neomouse/settings.toml, ~/Library/Application Support/neomouse/settings.toml.
+init:
+    @mkdir -p ~/.config/neomouse
+    @cp settings.toml ~/.config/neomouse/settings.toml
+    @echo "Installed default settings to ~/.config/neomouse/settings.toml"
+
 # Lint + test + config schema check — what the pre-commit hook runs
 check: lint test check-config
 

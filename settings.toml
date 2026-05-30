@@ -30,7 +30,6 @@ is_clamp_cursor_to_current_screen = false
 
 [visual]
 minimum_highlight_width = 5
-mouse_event_on_visual = "" #Options: "" ,"leftMouseDown", "rightMouseDown"
 
 [gesture]
 zoom_step_value = 0.1      # 0.01 .. 10
@@ -42,11 +41,17 @@ degrees_to_rotate = 90.0
 available = ["numbers", "relativenumbers", "delmarks"]
 
 [configuration]
-is_disable_key_input = true # When true, Keyboard input for most keys except 
+# When true, the CGEventTap runs in .defaultTap mode and swallows most plain
+# keypresses (a-z, 0-9) while neomouse is active. Cmd / Ctrl / Opt chords and
+# Esc / Tab / arrows / F-keys still flow to the focused app. When false, the
+# tap is .listenOnly — every key passes through, neomouse just observes.
+is_disable_key_input = true
 max_session_count = 10
-max_operations_per_session= 1000 #similar to vim.opt.history 
-max_jumps_per_session = 100
+# Open a fresh session on launch instead of resuming the most recent one.
 new_session_on_open = true
+# Which mode neomouse boots into. One of: "disabled", "normal", "find",
+# "command", "menu". "disabled" leaves neomouse dormant until Cmd-E activates.
+mode_on_start = "normal"
 #
 # [keymap]
 # # Motion keys. "modifier + key(s)" 
