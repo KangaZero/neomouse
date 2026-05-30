@@ -38,15 +38,15 @@ extension Config {
     /// element (or one shared element family — GridTheme covers both the
     /// find-mode grid and the cursor-surrounded special-find grid).
     public struct Theme: Decodable, Sendable {
-        public let grid: GridTheme
-        public let numbersOverlay: NumbersOverlayTheme
-        public let commandLine: CommandLineTheme
-        public let marksMenu: MarksMenuTheme
-        public let registerMenu: RegisterMenuTheme
-        public let helpDialog: HelpDialogTheme
-        public let visualHighlight: VisualHighlightTheme
-        public let toast: ToastTheme
-        public let keyCast: KeyCastTheme
+        public var grid: GridTheme
+        public var numbersOverlay: NumbersOverlayTheme
+        public var commandLine: CommandLineTheme
+        public var marksMenu: MarksMenuTheme
+        public var registerMenu: RegisterMenuTheme
+        public var helpDialog: HelpDialogTheme
+        public var visualHighlight: VisualHighlightTheme
+        public var toast: ToastTheme
+        public var keyCast: KeyCastTheme
 
         public init(
             grid: GridTheme = GridTheme(),
@@ -106,10 +106,10 @@ extension Config {
 /// `"#rgb"`, or `"#rgba"` — the `#` is optional. Out-of-format values throw
 /// a TOML decoding error at load time.
 public struct ThemeColor: Decodable, Sendable, Equatable {
-    public let red: Double
-    public let green: Double
-    public let blue: Double
-    public let alpha: Double
+    public var red: Double
+    public var green: Double
+    public var blue: Double
+    public var alpha: Double
 
     public init(red: Double, green: Double, blue: Double, alpha: Double = 1.0) {
         self.red = red
@@ -174,10 +174,10 @@ public struct ThemeColor: Decodable, Sendable, Equatable {
 /// stays consistent with macOS UI conventions). `design` only applies to
 /// the system font; it's ignored when `family` is set.
 public struct ThemeFont: Decodable, Sendable, Equatable {
-    public let family: String
-    public let size: Double
-    public let weight: Weight
-    public let design: Design
+    public var family: String
+    public var size: Double
+    public var weight: Weight
+    public var design: Design
 
     public enum Weight: String, Decodable, Sendable, CaseIterable {
         case ultraLight = "ultra_light"
@@ -270,21 +270,21 @@ public enum ThemeMaterial: String, Decodable, Sendable, CaseIterable {
 /// uses `outerLineColor` for its strokes and `innerLabelColor` /
 /// `innerLabelFont` for its single labels-per-cell.
 public struct GridTheme: Decodable, Sendable {
-    public let background: ThemeColor
-    public let outerLineColor: ThemeColor
-    public let outerLabelColor: ThemeColor
-    public let outerLabelFont: ThemeFont
-    public let innerLineColor: ThemeColor
-    public let innerFaintLineColor: ThemeColor
-    public let innerLabelColor: ThemeColor
-    public let innerLabelFont: ThemeFont
+    public var background: ThemeColor
+    public var outerLineColor: ThemeColor
+    public var outerLabelColor: ThemeColor
+    public var outerLabelFont: ThemeFont
+    public var innerLineColor: ThemeColor
+    public var innerFaintLineColor: ThemeColor
+    public var innerLabelColor: ThemeColor
+    public var innerLabelFont: ThemeFont
     /// CursorSurroundedGridOverlay-specific: box edge length in points.
-    public let cursorSurroundedBoxSize: Double
+    public var cursorSurroundedBoxSize: Double
     /// CursorSurroundedGridOverlay-specific: cells per axis.
-    public let cursorSurroundedDivisions: Int
+    public var cursorSurroundedDivisions: Int
     /// CursorSurroundedGridOverlay-specific: label font (denser cells need
     /// smaller text than GridOverlay's outer labels).
-    public let cursorSurroundedLabelFont: ThemeFont
+    public var cursorSurroundedLabelFont: ThemeFont
 
     public init(
         background: ThemeColor = .init(red: 0, green: 0, blue: 0, alpha: 0.15),
@@ -353,16 +353,16 @@ public struct GridTheme: Decodable, Sendable {
 public struct NumbersOverlayTheme: Decodable, Sendable {
     /// Which side of the screen the line-number gutter sits on. The column
     /// strip stays at the top for now (parallel toggle is a future TODO).
-    public let direction: ThemeDirection
-    public let gutterBackground: ThemeColor
-    public let cursorLineHighlight: ThemeColor
-    public let cursorColumnHighlight: ThemeColor
-    public let cursorTextColor: ThemeColor
-    public let textColor: ThemeColor
+    public var direction: ThemeDirection
+    public var gutterBackground: ThemeColor
+    public var cursorLineHighlight: ThemeColor
+    public var cursorColumnHighlight: ThemeColor
+    public var cursorTextColor: ThemeColor
+    public var textColor: ThemeColor
     /// Font size is auto-scaled to row height; this defines weight + design + family only.
-    public let font: ThemeFont
-    public let gutterWidth: Double
-    public let columnStripHeight: Double
+    public var font: ThemeFont
+    public var gutterWidth: Double
+    public var columnStripHeight: Double
 
     public init(
         direction: ThemeDirection = .left,
@@ -416,19 +416,19 @@ public struct NumbersOverlayTheme: Decodable, Sendable {
 }
 
 public struct CommandLineTheme: Decodable, Sendable {
-    public let anchor: ThemeAnchor
-    public let xOffset: Double
-    public let yOffset: Double
-    public let width: Double
-    public let height: Double
-    public let cornerRadius: Double
-    public let textFont: ThemeFont
-    public let textColor: ThemeColor
-    public let prefixColor: ThemeColor
-    public let suggestionFont: ThemeFont
-    public let suggestionTextColor: ThemeColor
-    public let suggestionHighlight: ThemeColor
-    public let material: ThemeMaterial
+    public var anchor: ThemeAnchor
+    public var xOffset: Double
+    public var yOffset: Double
+    public var width: Double
+    public var height: Double
+    public var cornerRadius: Double
+    public var textFont: ThemeFont
+    public var textColor: ThemeColor
+    public var prefixColor: ThemeColor
+    public var suggestionFont: ThemeFont
+    public var suggestionTextColor: ThemeColor
+    public var suggestionHighlight: ThemeColor
+    public var material: ThemeMaterial
 
     public init(
         anchor: ThemeAnchor = .bottom,
@@ -493,18 +493,18 @@ public struct CommandLineTheme: Decodable, Sendable {
 }
 
 public struct MarksMenuTheme: Decodable, Sendable {
-    public let anchor: ThemeAnchor
-    public let width: Double
-    public let height: Double
-    public let cornerRadius: Double
-    public let material: ThemeMaterial
-    public let headerFont: ThemeFont
-    public let markLabelFont: ThemeFont
-    public let cellFont: ThemeFont
-    public let emptyMessageFont: ThemeFont
-    public let selectedRowBackground: ThemeColor
-    public let rowPaddingX: Double
-    public let rowPaddingY: Double
+    public var anchor: ThemeAnchor
+    public var width: Double
+    public var height: Double
+    public var cornerRadius: Double
+    public var material: ThemeMaterial
+    public var headerFont: ThemeFont
+    public var markLabelFont: ThemeFont
+    public var cellFont: ThemeFont
+    public var emptyMessageFont: ThemeFont
+    public var selectedRowBackground: ThemeColor
+    public var rowPaddingX: Double
+    public var rowPaddingY: Double
 
     public init(
         anchor: ThemeAnchor = .center,
@@ -565,27 +565,27 @@ public struct MarksMenuTheme: Decodable, Sendable {
 }
 
 public struct RegisterMenuTheme: Decodable, Sendable {
-    public let anchor: ThemeAnchor
-    public let width: Double
-    public let height: Double
-    public let cornerRadius: Double
-    public let material: ThemeMaterial
-    public let cardWidth: Double
-    public let cardHeight: Double
-    public let cardPaddingX: Double
-    public let cardPaddingY: Double
-    public let viewPadding: Double
-    public let searchFont: ThemeFont
-    public let appNameFont: ThemeFont
-    public let registerLabelFont: ThemeFont
-    public let cardTextFont: ThemeFont
-    public let badgeFont: ThemeFont
-    public let registerBadgeBackground: ThemeColor
-    public let selectedCardBorder: ThemeColor
-    public let unselectedCardBorder: ThemeColor
-    public let cardShadowSelected: ThemeColor
-    public let cardShadowUnselected: ThemeColor
-    public let contentBackground: ThemeColor
+    public var anchor: ThemeAnchor
+    public var width: Double
+    public var height: Double
+    public var cornerRadius: Double
+    public var material: ThemeMaterial
+    public var cardWidth: Double
+    public var cardHeight: Double
+    public var cardPaddingX: Double
+    public var cardPaddingY: Double
+    public var viewPadding: Double
+    public var searchFont: ThemeFont
+    public var appNameFont: ThemeFont
+    public var registerLabelFont: ThemeFont
+    public var cardTextFont: ThemeFont
+    public var badgeFont: ThemeFont
+    public var registerBadgeBackground: ThemeColor
+    public var selectedCardBorder: ThemeColor
+    public var unselectedCardBorder: ThemeColor
+    public var cardShadowSelected: ThemeColor
+    public var cardShadowUnselected: ThemeColor
+    public var contentBackground: ThemeColor
 
     public init(
         anchor: ThemeAnchor = .center,
@@ -684,14 +684,14 @@ public struct RegisterMenuTheme: Decodable, Sendable {
 }
 
 public struct HelpDialogTheme: Decodable, Sendable {
-    public let anchor: ThemeAnchor
-    public let width: Double
-    public let height: Double
-    public let padding: Double
-    public let headerColor: ThemeColor
-    public let headerFont: ThemeFont
-    public let keybindFont: ThemeFont
-    public let descriptionColor: ThemeColor
+    public var anchor: ThemeAnchor
+    public var width: Double
+    public var height: Double
+    public var padding: Double
+    public var headerColor: ThemeColor
+    public var headerFont: ThemeFont
+    public var keybindFont: ThemeFont
+    public var descriptionColor: ThemeColor
 
     public init(
         anchor: ThemeAnchor = .center,
@@ -736,7 +736,7 @@ public struct HelpDialogTheme: Decodable, Sendable {
 }
 
 public struct VisualHighlightTheme: Decodable, Sendable {
-    public let fill: ThemeColor
+    public var fill: ThemeColor
 
     public init(
         fill: ThemeColor = .init(red: 0, green: 0.478, blue: 1, alpha: 0.3)
@@ -756,18 +756,18 @@ public struct VisualHighlightTheme: Decodable, Sendable {
 }
 
 public struct ToastTheme: Decodable, Sendable {
-    public let anchor: ThemeAnchor
-    public let xOffset: Double
-    public let yOffset: Double
-    public let width: Double
-    public let height: Double
-    public let cornerRadius: Double
-    public let paddingX: Double
-    public let paddingY: Double
-    public let outerPadding: Double
-    public let background: ThemeColor
-    public let textColor: ThemeColor
-    public let textFont: ThemeFont
+    public var anchor: ThemeAnchor
+    public var xOffset: Double
+    public var yOffset: Double
+    public var width: Double
+    public var height: Double
+    public var cornerRadius: Double
+    public var paddingX: Double
+    public var paddingY: Double
+    public var outerPadding: Double
+    public var background: ThemeColor
+    public var textColor: ThemeColor
+    public var textFont: ThemeFont
 
     public init(
         anchor: ThemeAnchor = .topRight,
@@ -825,19 +825,19 @@ public struct ToastTheme: Decodable, Sendable {
 }
 
 public struct KeyCastTheme: Decodable, Sendable {
-    public let anchor: ThemeAnchor
-    public let xOffset: Double
-    public let yOffset: Double
-    public let width: Double
-    public let height: Double
-    public let cornerRadius: Double
-    public let paddingX: Double
-    public let paddingY: Double
-    public let background: ThemeColor
-    public let textColor: ThemeColor
-    public let borderColor: ThemeColor
-    public let shadowColor: ThemeColor
-    public let textFont: ThemeFont
+    public var anchor: ThemeAnchor
+    public var xOffset: Double
+    public var yOffset: Double
+    public var width: Double
+    public var height: Double
+    public var cornerRadius: Double
+    public var paddingX: Double
+    public var paddingY: Double
+    public var background: ThemeColor
+    public var textColor: ThemeColor
+    public var borderColor: ThemeColor
+    public var shadowColor: ThemeColor
+    public var textFont: ThemeFont
 
     public init(
         anchor: ThemeAnchor = .top,

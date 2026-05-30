@@ -123,6 +123,8 @@ private struct MenuBarContent: View {
             Button("Registers") { openMenu(.register) }
             Button("Command Line") { openCommandLine() }
             Button("Help") { HelpDialog.shared.toggle() }
+            Button("Settings…") { openSettings() }
+                .keyboardShortcut(",", modifiers: .command)
         }
 
         Section("Diagnostics") {
@@ -230,6 +232,15 @@ private struct MenuBarContent: View {
             RegisterMenu.shared.passAppState(state: state)
             RegisterMenu.shared.toggle()
         }
+    }
+
+    /// Open the Apple-style settings window. Doesn't require neomouse to be
+    /// active — settings can be tuned with the daemon disabled (changes
+    /// still apply live via state.theme republish, and `Save` persists to
+    /// settings.toml regardless of mode).
+    private func openSettings() {
+        SettingsWindow.shared.passAppState(state: state)
+        SettingsWindow.shared.toggle()
     }
 
     /// Drop into command mode with an empty buffer — equivalent to pressing
