@@ -98,8 +98,10 @@ final class MarksMenu: ObservableObject {
         refresh()
         selectedIndex = marks.isEmpty ? 0 : min(selectedIndex, marks.count - 1)
 
+        let theme = appState.theme.marksMenu
+        let panelSize0 = CGSize(width: theme.width, height: theme.height)
         let panel = MarksPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 500, height: 500),
+            contentRect: CGRect(origin: .zero, size: panelSize0),
             styleMask: [.closable, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -125,15 +127,14 @@ final class MarksMenu: ObservableObject {
         hosting.sizingOptions = .preferredContentSize
         panel.contentView = hosting
 
-        // Centered on the screen under the cursor.
-        let frame = currentScreen.visibleFrame
         let panelSize = panel.frame.size
-        panel.setFrameOrigin(
-            CGPoint(
-                x: frame.midX - panelSize.width / 2,
-                y: frame.midY - panelSize.height / 2
-            )
+        let origin = theme.anchor.origin(
+            in: currentScreen.visibleFrame,
+            panelSize: panelSize,
+            offsetX: 0,
+            offsetY: 0
         )
+        panel.setFrameOrigin(origin)
 
         // makeKeyAndOrderFront (not orderFront) so the first click on a row
         // fires the SwiftUI tap gesture immediately. Without making the panel
@@ -170,12 +171,13 @@ private struct MarksMenuView: View {
     fileprivate static let colColW: CGFloat = 50
 
     var body: some View {
+        let theme = state.theme.marksMenu
         VStack(spacing: 0) {
-            header
+            header(theme: theme)
             Divider().opacity(0.4)
             if menu.marks.isEmpty {
                 Text("No marks in current session")
-                    .font(.system(size: 12))
+                    .font(theme.emptyMessageFont.swiftUI)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
@@ -199,15 +201,15 @@ private struct MarksMenuView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 500)
+                .frame(maxHeight: CGFloat(theme.height))
             }
         }
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .frame(width: 500)
+        .background(theme.material.swiftUI)
+        .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
+        .frame(width: CGFloat(theme.width))
     }
 
-    private var header: some View {
+    private func header(theme: MarksMenuTheme) -> some View {
         HStack(spacing: 8) {
             Text("Mark").frame(width: Self.markColW, alignment: .leading)
             Text("Line").frame(width: Self.lineColW, alignment: .trailing)
@@ -217,10 +219,10 @@ private struct MarksMenuView: View {
             Text("isVisual").frame(maxWidth: .infinity, alignment: .leading)
             Text("Screen").frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(theme.headerFont.swiftUI)
         .foregroundColor(.secondary)
         .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, theme.rowPaddingX)
     }
 }
 
@@ -247,35 +249,36 @@ private struct MarkRow: View {
     }
 
     var body: some View {
+        let theme = state.theme.marksMenu
         let cell = MarkRow.gridCell(for: mark, state: state)
         HStack(spacing: 8) {
             Text(mark.mark)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .font(theme.markLabelFont.swiftUI)
                 .frame(width: MarksMenuView.markColW, alignment: .leading)
             Text(cell.map { "\($0.line + 1)" } ?? "—")
-                .font(.system(size: 12, design: .monospaced))
+                .font(theme.cellFont.swiftUI)
                 .frame(width: MarksMenuView.lineColW, alignment: .trailing)
             Text(cell.map { "\($0.col + 1)" } ?? "—")
-                .font(.system(size: 12, design: .monospaced))
+                .font(theme.cellFont.swiftUI)
                 .frame(width: MarksMenuView.colColW, alignment: .trailing)
             Text(
                 "(\(mark.startCGXPoint.map { "\(Int($0))" } ?? "-"), \(mark.startCGYPoint.map { "\(Int($0))" } ?? "-"))"
             )
-            .font(.system(size: 12, design: .monospaced))
+            .font(theme.cellFont.swiftUI)
             .frame(maxWidth: .infinity, alignment: .leading)
             Text("(\(Int(mark.endCGXPoint)), \(Int(mark.endCGYPoint)))")
-                .font(.system(size: 12, design: .monospaced))
+                .font(theme.cellFont.swiftUI)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("(\(mark.isVisual ? "Yes" : "No"))")
-                .font(.system(size: 12, design: .monospaced))
+                .font(theme.cellFont.swiftUI)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("(\(screen.map { $0.localizedName } ?? "No Screen"))")
-                .font(.system(size: 12, design: .monospaced))
+                .font(theme.cellFont.swiftUI)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 12)
-        .background(isSelected ? Color.accentColor.opacity(0.35) : Color.clear)
+        .padding(.vertical, theme.rowPaddingY)
+        .padding(.horizontal, theme.rowPaddingX)
+        .background(isSelected ? theme.selectedRowBackground.swiftUI : Color.clear)
     }
 
     /// Map a mark's stored (global CG-space) position to a (line, col) cell on

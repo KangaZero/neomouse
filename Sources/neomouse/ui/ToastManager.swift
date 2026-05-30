@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+import neomouseConfig
 import neomouseUtils
 
 @MainActor
@@ -22,8 +23,14 @@ final class ToastManager {
         }
         window?.close()
 
+        // Theme is read off the singleton state — ToastManager doesn't get
+        // passAppState'd by callers (every other overlay does), so we fetch
+        // it directly here. Falls back to defaults if state isn't built yet.
+        let theme = NeoMouse.sharedState.theme.toast
+        let panelSize = CGSize(width: theme.width, height: theme.height)
+
         let panel = NSPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 300, height: 60),
+            contentRect: CGRect(origin: .zero, size: panelSize),
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -33,11 +40,15 @@ final class ToastManager {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.contentView = NSHostingView(rootView: ToastView(message: message))
+        panel.contentView = NSHostingView(rootView: ToastView(message: message, theme: theme))
 
-        let x = currentScreen.visibleFrame.maxX - 320
-        let y = currentScreen.visibleFrame.minY + 20
-        panel.setFrameOrigin(CGPoint(x: x, y: y))
+        let origin = theme.anchor.origin(
+            in: currentScreen.visibleFrame,
+            panelSize: panelSize,
+            offsetX: theme.offsetX,
+            offsetY: theme.offsetY
+        )
+        panel.setFrameOrigin(origin)
 
         panel.orderFront(nil)
         window = panel
@@ -56,19 +67,20 @@ final class ToastManager {
 
 struct ToastView: View {
     let message: String
+    let theme: ToastTheme
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "bell.fill")
-                .foregroundColor(.white)
+                .foregroundColor(theme.textColor.swiftUI)
             Text(message)
-                .foregroundColor(.white)
-                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(theme.textColor.swiftUI)
+                .font(theme.textFont.swiftUI)
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.black.opacity(0.85))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(10)
+        .padding(.horizontal, theme.paddingX)
+        .padding(.vertical, theme.paddingY)
+        .background(theme.background.swiftUI)
+        .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
+        .padding(theme.outerPadding)
     }
 }

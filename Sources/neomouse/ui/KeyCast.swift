@@ -10,10 +10,6 @@ final class KeyCast {
     private weak var appState: NeoMouseState?
     private var lastScreenNumber: UInt32?
 
-    private let panelWidth: CGFloat = 240
-    private let panelHeight: CGFloat = 48
-    private let topInset: CGFloat = 12
-
     func passAppState(state: NeoMouseState) {
         appState = state
         show()
@@ -40,9 +36,11 @@ final class KeyCast {
         guard let appState, let screen = currentScreen() else {
             return debug("KeyCast.show: no screen available or appState was never passed")
         }
+        let theme = appState.theme.keyCast
+        let panelSize = CGSize(width: theme.width, height: theme.height)
         if window == nil {
             let panel = NSPanel(
-                contentRect: CGRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
+                contentRect: CGRect(origin: .zero, size: panelSize),
                 styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -57,13 +55,13 @@ final class KeyCast {
             panel.contentView = NSHostingView(rootView: KeyCastView(state: appState))
             window = panel
         }
-        let frame = screen.visibleFrame
-        let x = frame.midX - panelWidth / 2
-        let y = frame.maxY - panelHeight - topInset
-        window?.setFrame(
-            CGRect(x: x, y: y, width: panelWidth, height: panelHeight),
-            display: true
+        let origin = theme.anchor.origin(
+            in: screen.visibleFrame,
+            panelSize: panelSize,
+            offsetX: theme.offsetX,
+            offsetY: theme.offsetY
         )
+        window?.setFrame(CGRect(origin: origin, size: panelSize), display: true)
         window?.orderFrontRegardless()
         if let n = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
             lastScreenNumber = n.uint32Value
@@ -91,18 +89,19 @@ private struct KeyCastView: View {
             // alpha-blended layer falls back from subpixel to grayscale antialiasing,
             // which reads as blurry/faint on Retina displays. The shadow + thin border
             // give the pill definition without sacrificing legibility.
+            let theme = state.theme.keyCast
             Text(pending)
-                .font(.system(size: 24, weight: .bold, design: .monospaced))
-                .foregroundColor(.black)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(Color.black)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .font(theme.textFont.swiftUI)
+                .foregroundColor(theme.textColor.swiftUI)
+                .padding(.horizontal, theme.paddingX)
+                .padding(.vertical, theme.paddingY)
+                .background(theme.background.swiftUI)
+                .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: theme.cornerRadius)
+                        .strokeBorder(theme.borderColor.swiftUI, lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(0.55), radius: 8, x: 0, y: 2)
+                .shadow(color: theme.shadowColor.swiftUI, radius: 8, x: 0, y: 2)
                 .frame(
                     minWidth: 100 as CGFloat, maxWidth: .infinity, minHeight: 40 as CGFloat,
                     maxHeight: .infinity)

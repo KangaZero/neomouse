@@ -15,18 +15,21 @@ final class CursorSurroundedGridOverlay {
     private var window: NSWindow?
     private weak var appState: NeoMouseState?
 
-    /// Edge length of the box, in points.
-    static let boxSize: CGFloat = 200
-    /// Cells per side. 6×6 = 36 lines up with the default
-    /// `findModeInnerCharacters` ("a…z0…9"). Going denser would exhaust the
-    /// alphabet; the renderer silently skips cells past the char count.
-    static let divisions: Int = 6
-
     /// CG-global top-left of the box, captured at show() time so the
     /// keyHandler can resolve a picked (col, row) back to a screen position
     /// without re-querying the cursor (which may have moved). Cleared on
     /// hide().
     private(set) var boxTopLeftCG: CGPoint?
+
+    /// Theme-driven runtime values. The keyHandler reads `divisions` (via
+    /// `currentDivisions`) to size the cell math, so we keep a property
+    /// instead of inlining theme access in the keyHandler call sites.
+    var currentDivisions: Int {
+        appState?.theme.grid.cursorSurroundedDivisions ?? 6
+    }
+    var currentBoxSize: CGFloat {
+        CGFloat(appState?.theme.grid.cursorSurroundedBoxSize ?? 200)
+    }
 
     var windowID: CGWindowID? {
         window.map { CGWindowID($0.windowNumber) }
@@ -55,7 +58,7 @@ final class CursorSurroundedGridOverlay {
     /// `Mouse.moveToGlobal`. Returns nil if the overlay isn't currently shown.
     func cellCenterCG(col: Int, row: Int) -> CGPoint? {
         guard let topLeft = boxTopLeftCG else { return nil }
-        let cellSize = Self.boxSize / CGFloat(Self.divisions)
+        let cellSize = currentBoxSize / CGFloat(currentDivisions)
         return CGPoint(
             x: topLeft.x + CGFloat(col) * cellSize + cellSize / 2,
             y: topLeft.y + CGFloat(row) * cellSize + cellSize / 2
@@ -91,7 +94,7 @@ final class CursorSurroundedGridOverlay {
             return debug("CursorSurroundedGridOverlay.show: no CG display under cursor")
         }
 
-        let size = Self.boxSize
+        let size = currentBoxSize
 
         // NS-side: window frame in screen coords. visibleFrame excludes menu
         // bar + Dock, so we can't tuck under either.
@@ -139,11 +142,12 @@ private struct CursorSurroundedGridOverlayView: View {
     @ObservedObject var state: NeoMouseState
 
     var body: some View {
+        let theme = state.theme.grid
         GeometryReader { geo in
             ZStack {
-                Color.black.opacity(0.25)
+                theme.background.swiftUI
                 Canvas { ctx, _ in
-                    let divisions = CursorSurroundedGridOverlay.divisions
+                    let divisions = theme.cursorSurroundedDivisions
                     let cellW = geo.size.width / CGFloat(divisions)
                     let cellH = geo.size.height / CGFloat(divisions)
 
@@ -157,7 +161,7 @@ private struct CursorSurroundedGridOverlayView: View {
                         path.move(to: CGPoint(x: 0, y: y))
                         path.addLine(to: CGPoint(x: geo.size.width, y: y))
                     }
-                    ctx.stroke(path, with: .color(.white.opacity(0.45)), lineWidth: 0.5)
+                    ctx.stroke(path, with: .color(theme.outerLineColor.swiftUI), lineWidth: 0.5)
 
                     // Character labels — reuse the inner-grid alphabet so
                     // the user doesn't have to learn a third character set.
@@ -167,8 +171,8 @@ private struct CursorSurroundedGridOverlayView: View {
                             let index = row * divisions + col
                             guard index < chars.count else { continue }
                             let label = Text(chars[index])
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.white)
+                                .font(theme.cursorSurroundedLabelFont.swiftUI)
+                                .foregroundColor(theme.innerLabelColor.swiftUI)
                             ctx.draw(
                                 label,
                                 at: CGPoint(

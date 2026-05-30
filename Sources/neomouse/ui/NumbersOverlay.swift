@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 
+import neomouseConfig
 import neomouseUtils
 
 /// Vim-style ruler overlay. Pinned to the display under the cursor at
@@ -74,10 +75,14 @@ final class NumbersOverlay {
     /// moves the window over and refreshes the captured frame.
     private var anchoredScreen: NSScreen?
 
-    /// Width of the row gutter, in points.
-    static let gutterWidth: CGFloat = 20
-    /// Height of the top column strip, in points.
-    static let columnStripHeight: CGFloat = 20
+    /// Theme-driven gutter dimensions. Read from `appState.theme.numbersOverlay`
+    /// at present-time; fall back to defaults when state isn't available yet.
+    var gutterWidth: CGFloat {
+        CGFloat(appState?.theme.numbersOverlay.gutterWidth ?? 20)
+    }
+    var columnStripHeight: CGFloat {
+        CGFloat(appState?.theme.numbersOverlay.columnStripHeight ?? 20)
+    }
 
     func passAppState(state: NeoMouseState) {
         appState = state
@@ -169,7 +174,9 @@ final class NumbersOverlay {
             win.ignoresMouseEvents = true
             win.isReleasedWhenClosed = false
             win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            win.contentView = NSHostingView(rootView: NumbersOverlayView(model: model))
+            let theme = appState?.theme.numbersOverlay ?? NumbersOverlayTheme()
+            win.contentView = NSHostingView(
+                rootView: NumbersOverlayView(model: model, theme: theme))
             window = win
         }
         window?.setFrame(Self.rectForScreen(currentScreen), display: true)
@@ -351,6 +358,7 @@ final class NumbersOverlay {
 
 struct NumbersOverlayView: View {
     @ObservedObject var model: NumbersOverlay.Model
+    let theme: NumbersOverlayTheme
 
     var body: some View {
         // Drive layout from `screenFrame` directly instead of a
@@ -373,6 +381,16 @@ struct NumbersOverlayView: View {
             width: max(0, outer.width - 2 * inset),
             height: max(0, outer.height - 2 * inset)
         )
+        // Gutter sits flush against the left or right edge of the inset rect
+        // based on `theme.direction`. .left → x: inset (original behavior).
+        // .right → x: inset + inner.width - gutterWidth.
+        let gutterWidth = CGFloat(theme.gutterWidth)
+        let gutterX: CGFloat = {
+            switch theme.direction {
+            case .left: return inset
+            case .right: return inset + inner.width - gutterWidth
+            }
+        }()
         ZStack(alignment: .topLeading) {
             // Highlight bands first → row gutter + column strip draw on top
             // so labels stay legible over the tint. Bands span the full
@@ -388,7 +406,7 @@ struct NumbersOverlayView: View {
             // (`:cursorline` / `:cursorcolumn` without numbers).
             if model.mode != .off {
                 rowGutter(totalHeight: inner.height)
-                    .offset(x: inset, y: inset)
+                    .offset(x: gutterX, y: inset)
                 columnStrip(totalWidth: inner.width)
                     .offset(x: inset, y: inset)
             }
@@ -401,7 +419,7 @@ struct NumbersOverlayView: View {
     private func cursorlineBand(inner: CGSize) -> some View {
         if model.options.contains(.cursorline) {
             Rectangle()
-                .fill(Color.yellow.opacity(0.18))
+                .fill(theme.cursorLineHighlight.swiftUI)
                 .frame(width: inner.width, height: model.stepY)
                 .offset(y: CGFloat(model.currentLineIndex) * model.stepY)
         }
@@ -411,7 +429,7 @@ struct NumbersOverlayView: View {
     private func cursorcolumnBand(inner: CGSize) -> some View {
         if model.options.contains(.cursorcolumn) {
             Rectangle()
-                .fill(Color.yellow.opacity(0.18))
+                .fill(theme.cursorColumnHighlight.swiftUI)
                 .frame(width: model.stepX, height: inner.height)
                 .offset(x: CGFloat(model.currentColumnIndex) * model.stepX)
         }
@@ -424,22 +442,29 @@ struct NumbersOverlayView: View {
         // totalHeight/count — divides drift when usable height isn't an
         // exact multiple of the step.
         let rowHeight = model.stepY
-        let fontSize = max(9, min(14, rowHeight * 0.6))
+        // Auto-scale to row height, capped at the theme's configured size.
+        let fontSize = max(9, min(theme.font.size, rowHeight * 0.6))
+        // Right-direction gutters look better with text aligned to the
+        // leading edge (text grows away from the screen edge); left
+        // direction keeps the original trailing alignment.
+        let textAlignment: Alignment = theme.direction == .right ? .leading : .trailing
         VStack(spacing: 0) {
             ForEach(0..<count, id: \.self) { i in
                 Text(rowLabel(i))
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(
+                        scaledFont(base: theme.font, size: fontSize)
+                    )
                     .foregroundColor(rowColor(i))
                     .frame(
-                        width: NumbersOverlay.gutterWidth,
+                        width: CGFloat(theme.gutterWidth),
                         height: rowHeight,
-                        alignment: .trailing
+                        alignment: textAlignment
                     )
-                    .padding(.trailing, 6)
+                    .padding(theme.direction == .right ? .leading : .trailing, 6)
             }
         }
-        .frame(width: NumbersOverlay.gutterWidth, height: totalHeight, alignment: .topLeading)
-        .background(Color.black.opacity(0.55))
+        .frame(width: CGFloat(theme.gutterWidth), height: totalHeight, alignment: .topLeading)
+        .background(theme.gutterBackground.swiftUI)
     }
 
     @ViewBuilder
@@ -450,19 +475,29 @@ struct NumbersOverlayView: View {
         // Tighter font bound for the column strip — many narrow cells means
         // labels need to fit in <colWidth, with minimumScaleFactor taking
         // over when even the floor is too big.
-        let fontSize = max(8, min(12, colWidth * 0.45))
+        let fontSize = max(8, min(theme.font.size, colWidth * 0.45))
         HStack(spacing: 0) {
             ForEach(0..<count, id: \.self) { i in
                 Text(columnLabel(i))
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(scaledFont(base: theme.font, size: fontSize))
                     .foregroundColor(columnColor(i))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                    .frame(width: colWidth, height: NumbersOverlay.columnStripHeight)
+                    .frame(width: colWidth, height: CGFloat(theme.columnStripHeight))
             }
         }
-        .frame(width: totalWidth, height: NumbersOverlay.columnStripHeight, alignment: .topLeading)
-        .background(Color.black.opacity(0.55))
+        .frame(
+            width: totalWidth, height: CGFloat(theme.columnStripHeight), alignment: .topLeading
+        )
+        .background(theme.gutterBackground.swiftUI)
+    }
+
+    /// Build a SwiftUI Font with the same family/weight/design as `base`
+    /// but at `size`. Used to honor the auto-scale row-height math while
+    /// keeping the user's font knobs intact.
+    private func scaledFont(base: ThemeFont, size: CGFloat) -> Font {
+        ThemeFont(size: Double(size), weight: base.weight, design: base.design, family: base.family)
+            .swiftUI
     }
 
     private func rowLabel(_ i: Int) -> String {
@@ -489,11 +524,11 @@ struct NumbersOverlayView: View {
 
     private func rowColor(_ i: Int) -> Color {
         (model.mode == .relative && i == model.currentLineIndex)
-            ? .yellow : .white.opacity(0.75)
+            ? theme.cursorTextColor.swiftUI : theme.textColor.swiftUI
     }
 
     private func columnColor(_ i: Int) -> Color {
         (model.mode == .relative && i == model.currentColumnIndex)
-            ? .yellow : .white.opacity(0.75)
+            ? theme.cursorTextColor.swiftUI : theme.textColor.swiftUI
     }
 }

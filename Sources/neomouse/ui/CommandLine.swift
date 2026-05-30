@@ -306,8 +306,10 @@ final class CommandLine {
                 "Could not retrieve current screen in CommandLine.show and/or appState is \(appState == nil ? "nil" : "not nil")"
             )
         }
+        let theme = appState.theme.commandLine
+        let panelSize = CGSize(width: theme.width, height: theme.height)
         let panel = NSPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 420, height: 60),
+            contentRect: CGRect(origin: .zero, size: panelSize),
             styleMask: [.nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -327,13 +329,13 @@ final class CommandLine {
         hosting.sizingOptions = .preferredContentSize
         panel.contentView = hosting
 
-        // Bottom-left of the display under the cursor. visibleFrame already
-        // excludes the menu bar + Dock.
-        // TODO make this configurable? Maybe some users want it top-left, or centered etc
-        // Make default to top-center, like it is right now
-        let x = ((currentScreen.visibleFrame.minX + currentScreen.visibleFrame.maxX) / 2) - (panel.frame.width / 2)
-        let y = currentScreen.visibleFrame.maxY - 100
-        panel.setFrameOrigin(CGPoint(x: x, y: y))
+        let origin = theme.anchor.origin(
+            in: currentScreen.visibleFrame,
+            panelSize: panelSize,
+            offsetX: theme.offsetX,
+            offsetY: theme.offsetY
+        )
+        panel.setFrameOrigin(origin)
 
         panel.orderFront(nil)
         window = panel
@@ -348,10 +350,13 @@ final class CommandLine {
             let cli = CommandLine.shared
             let hits = cli.filtered
             let highlighted = cli.suggestionIndex
+            let theme = state.theme.commandLine
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 4) {
-                    Text(":").foregroundColor(.secondary)
-                    Text(cli.commandText).font(.system(.body, design: .monospaced))
+                    Text(":").foregroundColor(theme.prefixColor.swiftUI)
+                    Text(cli.commandText)
+                        .font(theme.textFont.swiftUI)
+                        .foregroundColor(theme.textColor.swiftUI)
                     Spacer()
                 }
                 .padding(.horizontal, 10)
@@ -364,17 +369,21 @@ final class CommandLine {
                     // suggestionIndex on the .command mode payload).
                     ForEach(Array(hits.enumerated()), id: \.element) { idx, suggestion in
                         Text(suggestion.rawValue)
-                            .font(.system(.body, design: .monospaced))
+                            .font(theme.suggestionFont.swiftUI)
+                            .foregroundColor(theme.suggestionTextColor.swiftUI)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 3)
-                            .background(idx == highlighted ? Color.accentColor.opacity(0.35) : .clear)
+                            .background(
+                                idx == highlighted
+                                    ? theme.suggestionHighlight.swiftUI : Color.clear
+                            )
                     }
                 }
             }
-            .frame(minWidth: 400, alignment: .leading)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .frame(minWidth: CGFloat(theme.width - 20), alignment: .leading)
+            .background(theme.material.swiftUI)
+            .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
         }
     }
 }

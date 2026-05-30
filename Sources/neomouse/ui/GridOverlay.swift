@@ -71,9 +71,10 @@ final class GridOverlay {
 struct GridOverlayView: View {
     @ObservedObject var state: NeoMouseState
     var body: some View {
+        let theme = state.theme.grid
         GeometryReader { geo in
             ZStack {
-                Color.black.opacity(0.15)
+                theme.background.swiftUI
                 Canvas { ctx, _ in
                     let inset = state.gridInset
                     let startX = inset
@@ -106,7 +107,7 @@ struct GridOverlayView: View {
                             focusedPath.move(to: CGPoint(x: cellOriginX, y: y))
                             focusedPath.addLine(to: CGPoint(x: cellOriginX + cellWidth, y: y))
                         }
-                        ctx.stroke(focusedPath, with: .color(.white.opacity(0.6)), lineWidth: 1)
+                        ctx.stroke(focusedPath, with: .color(theme.innerLineColor.swiftUI), lineWidth: 1)
 
                         for innerCol in 0..<state.innerGridDivisions {
                             for innerRow in 0..<state.innerGridDivisions {
@@ -123,8 +124,8 @@ struct GridOverlayView: View {
                                 .accessibilityLabel(
                                     "Inner Row \(innerRow) Inner Col \(innerCol) \(state.findModeInnerGridDivisionCharacters[innerIndex])"
                                 )
-                                .font(.system(size: 12))
-                                .foregroundColor(.white)
+                                .font(theme.innerLabelFont.swiftUI)
+                                .foregroundColor(theme.innerLabelColor.swiftUI)
                                 ctx.draw(
                                     label, at: CGPoint(x: innerMiddleX, y: innerMiddleY),
                                     anchor: .center)
@@ -144,7 +145,9 @@ struct GridOverlayView: View {
                                 innerPath.move(to: CGPoint(x: startX, y: y))
                                 innerPath.addLine(to: CGPoint(x: endX, y: y))
                             }
-                            ctx.stroke(innerPath, with: .color(.white.opacity(0.3)), lineWidth: 0.5)
+                            ctx.stroke(
+                                innerPath, with: .color(theme.innerFaintLineColor.swiftUI),
+                                lineWidth: 0.5)
                         }
                         var outerPath = Path()
                         for i in 0...state.gridDivisions {
@@ -155,7 +158,7 @@ struct GridOverlayView: View {
                             outerPath.move(to: CGPoint(x: startX, y: y))
                             outerPath.addLine(to: CGPoint(x: endX, y: y))
                         }
-                        ctx.stroke(outerPath, with: .color(.white.opacity(0.6)), lineWidth: 1)
+                        ctx.stroke(outerPath, with: .color(theme.outerLineColor.swiftUI), lineWidth: 1)
 
                         for col in 0..<state.gridDivisions {
                             for row in 0..<state.gridDivisions {
@@ -168,8 +171,8 @@ struct GridOverlayView: View {
                                 .accessibilityLabel(
                                     "Row \(row) Col \(col) \(state.findModeGridDivisionCharacters[index])"
                                 )
-                                .font(.system(size: 60, weight: .bold))
-                                .foregroundColor(.blue)
+                                .font(theme.outerLabelFont.swiftUI)
+                                .foregroundColor(theme.outerLabelColor.swiftUI)
 
                                 ctx.draw(
                                     charLabel,
@@ -189,8 +192,8 @@ struct GridOverlayView: View {
                                             let findCharInnerGridDivisionText = Text(
                                                 "\(state.findModeInnerGridDivisionCharacters[innerIndex])"
                                             )
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.white)
+                                            .font(theme.innerLabelFont.swiftUI)
+                                            .foregroundColor(theme.innerLabelColor.swiftUI)
                                             ctx.draw(
                                                 findCharInnerGridDivisionText,
                                                 at: CGPoint(

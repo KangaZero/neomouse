@@ -18,6 +18,11 @@ public struct Config: Decodable, Sendable {
     public let gesture: Gesture
     public let commands: Commands
     public let configuration: Configuration
+    /// Optional so existing settings.toml files without a `[theme]` section
+    /// keep decoding cleanly. When nil, the consumer (NeoMouseState) falls
+    /// back to `Theme()` — every sub-theme initializes to defaults that
+    /// match the app's pre-theme visual appearance.
+    public let theme: Theme?
 
     public struct Grid: Decodable, Sendable {
         public let inset: CGFloat

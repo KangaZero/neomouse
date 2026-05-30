@@ -54,6 +54,13 @@ class NeoMouseState: ObservableObject {
     let modeOnStart: NeomouseType.ConfigMode
     //TODO add the rest
 
+    // User-overridable visual theme for every overlay / menu / toast. Read
+    // by the UI singletons (GridOverlay / NumbersOverlay / ToastManager /
+    // …) via `passAppState`. Defaults match the original hardcoded values
+    // so a settings.toml with no `[theme.*]` blocks renders identically to
+    // the pre-theme app.
+    let theme: Config.Theme
+
     // Single init covers both paths: when neomouseConfig finds settings.toml,
     // every property comes from there; otherwise each falls back to the same
     // hardcoded values this class used before config wiring.
@@ -85,6 +92,7 @@ class NeoMouseState: ObservableObject {
             config?.configuration.isDisableKeyInput ?? Config.Configuration.defaultIsDisableKeyInput
         self.modeOnStart =
             config?.configuration.modeOnStart ?? Config.Configuration.defaultModeOnStart
+        self.theme = config?.theme ?? Config.Theme()
 
         mode = {
             switch self.modeOnStart {
@@ -1736,7 +1744,7 @@ struct NeoMouse: App {
                             ".specialFind: '\(keyChar)' not in findModeInnerGridDivisionCharacters")
                         return
                     }
-                    let divisions = CursorSurroundedGridOverlay.divisions
+                    let divisions = CursorSurroundedGridOverlay.shared.currentDivisions
                     guard cellIndex < divisions * divisions else {
                         debug(
                             ".specialFind: cellIndex \(cellIndex) exceeds grid capacity \(divisions * divisions)"

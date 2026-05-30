@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+import neomouseConfig
 import neomouseUtils
 
 /// Floating help window listing every neomouse keybind. Press `?` in normal
@@ -45,7 +46,8 @@ final class HelpDialog {
             debug("HelpDialog.show: no screen available")
             return
         }
-        let size = CGSize(width: 700, height: 850)
+        let theme = NeoMouse.sharedState.theme.helpDialog
+        let size = CGSize(width: theme.width, height: theme.height)
         let win: NSWindow
         if let existing = window {
             win = existing
@@ -63,12 +65,14 @@ final class HelpDialog {
             win.isReleasedWhenClosed = false
             win.hidesOnDeactivate = false
             win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            win.contentView = NSHostingView(rootView: HelpDialogView())
+            win.contentView = NSHostingView(rootView: HelpDialogView(theme: theme))
             window = win
         }
-        let origin = CGPoint(
-            x: currentScreen.visibleFrame.midX - size.width / 2,
-            y: currentScreen.visibleFrame.midY - size.height / 2
+        let origin = theme.anchor.origin(
+            in: currentScreen.visibleFrame,
+            panelSize: size,
+            offsetX: 0,
+            offsetY: 0
         )
         win.setFrameOrigin(origin)
         // orderFront, not makeKeyAndOrderFront — show without stealing focus.
@@ -81,6 +85,7 @@ final class HelpDialog {
 }
 
 struct HelpDialogView: View {
+    let theme: HelpDialogTheme
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -127,7 +132,7 @@ struct HelpDialogView: View {
                     row("+ / -", "Pinch zoom in / out")
                 }
             }
-            .padding(20)
+            .padding(theme.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
         }
@@ -137,8 +142,8 @@ struct HelpDialogView: View {
     private func section<Content: View>(_ title: String, @ViewBuilder _ rows: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.headline)
-                .foregroundColor(.accentColor)
+                .font(theme.headerFont.swiftUI)
+                .foregroundColor(theme.headerColor.swiftUI)
             rows()
         }
     }
@@ -146,11 +151,11 @@ struct HelpDialogView: View {
     private func row(_ key: String, _ description: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(key)
-                .font(.system(.body, design: .monospaced))
+                .font(theme.keybindFont.swiftUI)
                 .frame(width: 140, alignment: .leading)
                 .foregroundColor(.primary)
             Text(description)
-                .foregroundColor(.secondary)
+                .foregroundColor(theme.descriptionColor.swiftUI)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

@@ -12,7 +12,8 @@
     "visual": { "$ref": "#/$defs/visual" },
     "gesture": { "$ref": "#/$defs/gesture" },
     "commands": { "$ref": "#/$defs/commands" },
-    "configuration": { "$ref": "#/$defs/configuration" }
+    "configuration": { "$ref": "#/$defs/configuration" },
+    "theme": { "$ref": "#/$defs/theme" }
   },
   "$defs": {
     "grid": {
@@ -208,6 +209,210 @@
           "description": "Which mode neomouse boots into. 'disabled' leaves it dormant until Cmd-E activates."
         }
       }
+    },
+    "theme": {
+      "type": "object",
+      "description": "Per-element visual overrides for every UI overlay except the menu-bar icon. Every section is optional; omitted keys keep the built-in defaults.",
+      "additionalProperties": false,
+      "properties": {
+        "grid": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Shared theme for GridOverlay (find-mode big grid) and CursorSurroundedGridOverlay (special-find dense grid).",
+          "properties": {
+            "background": { "$ref": "#/$defs/themeColor" },
+            "outer_line_color": { "$ref": "#/$defs/themeColor" },
+            "outer_label_color": { "$ref": "#/$defs/themeColor" },
+            "outer_label_font": { "$ref": "#/$defs/themeFont" },
+            "inner_line_color": { "$ref": "#/$defs/themeColor" },
+            "inner_faint_line_color": { "$ref": "#/$defs/themeColor" },
+            "inner_label_color": { "$ref": "#/$defs/themeColor" },
+            "inner_label_font": { "$ref": "#/$defs/themeFont" },
+            "cursor_surrounded_box_size": { "type": "number", "exclusiveMinimum": 0 },
+            "cursor_surrounded_divisions": { "type": "integer", "minimum": 1, "maximum": 12 },
+            "cursor_surrounded_label_font": { "$ref": "#/$defs/themeFont" }
+          }
+        },
+        "numbers_overlay": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "direction": { "type": "string", "enum": ["left", "right"] },
+            "gutter_background": { "$ref": "#/$defs/themeColor" },
+            "cursor_line_highlight": { "$ref": "#/$defs/themeColor" },
+            "cursor_column_highlight": { "$ref": "#/$defs/themeColor" },
+            "cursor_text_color": { "$ref": "#/$defs/themeColor" },
+            "text_color": { "$ref": "#/$defs/themeColor" },
+            "font": { "$ref": "#/$defs/themeFont" },
+            "gutter_width": { "type": "number", "exclusiveMinimum": 0 },
+            "column_strip_height": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "command_line": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor": { "$ref": "#/$defs/themeAnchor" },
+            "offset_x": { "type": "number" },
+            "offset_y": { "type": "number" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "corner_radius": { "type": "number", "minimum": 0 },
+            "text_font": { "$ref": "#/$defs/themeFont" },
+            "text_color": { "$ref": "#/$defs/themeColor" },
+            "prefix_color": { "$ref": "#/$defs/themeColor" },
+            "suggestion_font": { "$ref": "#/$defs/themeFont" },
+            "suggestion_text_color": { "$ref": "#/$defs/themeColor" },
+            "suggestion_highlight": { "$ref": "#/$defs/themeColor" },
+            "material": { "$ref": "#/$defs/themeMaterial" }
+          }
+        },
+        "marks_menu": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor": { "$ref": "#/$defs/themeAnchor" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "corner_radius": { "type": "number", "minimum": 0 },
+            "material": { "$ref": "#/$defs/themeMaterial" },
+            "header_font": { "$ref": "#/$defs/themeFont" },
+            "mark_label_font": { "$ref": "#/$defs/themeFont" },
+            "cell_font": { "$ref": "#/$defs/themeFont" },
+            "empty_message_font": { "$ref": "#/$defs/themeFont" },
+            "selected_row_background": { "$ref": "#/$defs/themeColor" },
+            "row_padding_x": { "type": "number", "minimum": 0 },
+            "row_padding_y": { "type": "number", "minimum": 0 }
+          }
+        },
+        "register_menu": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor": { "$ref": "#/$defs/themeAnchor" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "corner_radius": { "type": "number", "minimum": 0 },
+            "material": { "$ref": "#/$defs/themeMaterial" },
+            "card_width": { "type": "number", "exclusiveMinimum": 0 },
+            "card_height": { "type": "number", "exclusiveMinimum": 0 },
+            "card_padding_x": { "type": "number", "minimum": 0 },
+            "card_padding_y": { "type": "number", "minimum": 0 },
+            "view_padding": { "type": "number", "minimum": 0 },
+            "search_font": { "$ref": "#/$defs/themeFont" },
+            "app_name_font": { "$ref": "#/$defs/themeFont" },
+            "register_label_font": { "$ref": "#/$defs/themeFont" },
+            "card_text_font": { "$ref": "#/$defs/themeFont" },
+            "badge_font": { "$ref": "#/$defs/themeFont" },
+            "register_badge_background": { "$ref": "#/$defs/themeColor" },
+            "selected_card_border": { "$ref": "#/$defs/themeColor" },
+            "unselected_card_border": { "$ref": "#/$defs/themeColor" },
+            "card_shadow_selected": { "$ref": "#/$defs/themeColor" },
+            "card_shadow_unselected": { "$ref": "#/$defs/themeColor" },
+            "content_background": { "$ref": "#/$defs/themeColor" }
+          }
+        },
+        "help_dialog": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor": { "$ref": "#/$defs/themeAnchor" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "padding": { "type": "number", "minimum": 0 },
+            "header_color": { "$ref": "#/$defs/themeColor" },
+            "header_font": { "$ref": "#/$defs/themeFont" },
+            "keybind_font": { "$ref": "#/$defs/themeFont" },
+            "description_color": { "$ref": "#/$defs/themeColor" }
+          }
+        },
+        "visual_highlight": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fill": { "$ref": "#/$defs/themeColor" }
+          }
+        },
+        "toast": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor": { "$ref": "#/$defs/themeAnchor" },
+            "offset_x": { "type": "number" },
+            "offset_y": { "type": "number" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "corner_radius": { "type": "number", "minimum": 0 },
+            "padding_x": { "type": "number", "minimum": 0 },
+            "padding_y": { "type": "number", "minimum": 0 },
+            "outer_padding": { "type": "number", "minimum": 0 },
+            "background": { "$ref": "#/$defs/themeColor" },
+            "text_color": { "$ref": "#/$defs/themeColor" },
+            "text_font": { "$ref": "#/$defs/themeFont" }
+          }
+        },
+        "key_cast": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor": { "$ref": "#/$defs/themeAnchor" },
+            "offset_x": { "type": "number" },
+            "offset_y": { "type": "number" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "corner_radius": { "type": "number", "minimum": 0 },
+            "padding_x": { "type": "number", "minimum": 0 },
+            "padding_y": { "type": "number", "minimum": 0 },
+            "background": { "$ref": "#/$defs/themeColor" },
+            "text_color": { "$ref": "#/$defs/themeColor" },
+            "border_color": { "$ref": "#/$defs/themeColor" },
+            "shadow_color": { "$ref": "#/$defs/themeColor" },
+            "text_font": { "$ref": "#/$defs/themeFont" }
+          }
+        }
+      }
+    },
+    "themeColor": {
+      "type": "string",
+      "pattern": "^#?(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+      "description": "Hex color: '#rgb', '#rgba', '#rrggbb', or '#rrggbbaa'. The leading # is optional."
+    },
+    "themeFont": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "type": "string",
+          "description": "Empty string = system font. Otherwise an installed font name (e.g. 'SF Mono', 'Menlo')."
+        },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "weight": {
+          "type": "string",
+          "enum": [
+            "ultra_light", "thin", "light", "regular",
+            "medium", "semibold", "bold", "heavy", "black"
+          ]
+        },
+        "design": {
+          "type": "string",
+          "enum": ["default", "monospaced", "serif", "rounded"],
+          "description": "Only applies when family is empty (system font)."
+        }
+      }
+    },
+    "themeAnchor": {
+      "type": "string",
+      "enum": [
+        "top", "top_left", "top_right",
+        "center", "center_left", "center_right",
+        "bottom", "bottom_left", "bottom_right"
+      ],
+      "description": "Where on the active screen's visible frame the overlay anchors. Combine with offset_x / offset_y to push inward from the anchor edge."
+    },
+    "themeMaterial": {
+      "type": "string",
+      "enum": ["ultra_thin", "thin", "regular", "thick", "ultra_thick", "bar", "hud"],
+      "description": "SwiftUI Material flavor — controls the level of background blur for translucent panels."
     }
   }
 }

@@ -52,6 +52,53 @@ new_session_on_open = true
 # Which mode neomouse boots into. One of: "disabled", "normal", "find",
 # "command", "menu". "disabled" leaves neomouse dormant until Cmd-E activates.
 mode_on_start = "normal"
+
+# ---------------------------------------------------------------------------
+# [theme.*] — per-element visual overrides
+# ---------------------------------------------------------------------------
+# Every sub-section is optional; missing keys keep the built-in defaults.
+# Colors are hex strings: "#rgb", "#rgba", "#rrggbb", "#rrggbbaa" (the # is
+# optional). Fonts take `family` (empty = system), `size`, `weight`
+# (ultra_light..black) and `design` (default | monospaced | serif | rounded).
+# Anchors are one of: top | top_left | top_right | center | center_left |
+# center_right | bottom | bottom_left | bottom_right.
+# Materials are: ultra_thin | thin | regular | thick | ultra_thick | bar | hud.
+#
+# See schema/settings.schema.json for the full list of knobs per element —
+# what's below is a starting taste, not the complete menu.
+
+[theme.numbers_overlay]
+# Render the line-number gutter on the right edge of the screen instead of
+# the default left. Useful when a left-side dock or window manager strip
+# competes with the gutter for screen edge real estate.
+direction = "left"
+
+[theme.toast]
+# Top-right corner of the active screen, inset by 20pt on each axis.
+anchor = "top_right"
+offset_x = 20
+offset_y = 20
+
+# [theme.command_line]
+# anchor = "bottom"
+# offset_y = 100
+# width = 420
+
+# [theme.grid]
+# background = "#000000bb"
+# outer_label_color = "#00bfff"
+# outer_label_font = { size = 72, weight = "bold" }
+# inner_label_color = "#ffffff"
+
+# [theme.visual_highlight]
+# fill = "#007aff4d"   # accent blue at 30% alpha
+
+# [theme.key_cast]
+# anchor = "top"
+# offset_y = 12
+# background = "#000000"
+# text_color = "#ffffff"
+# text_font = { size = 24, weight = "bold", design = "monospaced" }
 #
 # [keymap]
 # # Motion keys. "modifier + key(s)" 

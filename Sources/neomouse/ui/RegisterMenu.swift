@@ -144,8 +144,9 @@ final class RegisterMenu: ObservableObject {
         searchText = ""
         selectedIndex = 0
 
+        let theme = appState.theme.registerMenu
         let panel = RegisterPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 920, height: 380),
+            contentRect: CGRect(x: 0, y: 0, width: theme.width, height: theme.height),
             styleMask: [.closable, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -162,15 +163,14 @@ final class RegisterMenu: ObservableObject {
         hosting.sizingOptions = .preferredContentSize
         panel.contentView = hosting
 
-        // Centered on the screen under the cursor.
-        let frame = currentScreen.visibleFrame
         let panelSize = panel.frame.size
-        panel.setFrameOrigin(
-            CGPoint(
-                x: frame.midX - panelSize.width / 2,
-                y: frame.midY - panelSize.height / 2
-            )
+        let origin = theme.anchor.origin(
+            in: currentScreen.visibleFrame,
+            panelSize: panelSize,
+            offsetX: 0,
+            offsetY: 0
         )
+        panel.setFrameOrigin(origin)
 
         panel.makeKeyAndOrderFront(nil)
         window = panel
@@ -193,9 +193,10 @@ private struct RegisterMenuView: View {
     @ObservedObject var state: NeoMouseState
 
     var body: some View {
+        let theme = state.theme.registerMenu
         let items = menu.filteredRegisters
         VStack(spacing: 10) {
-            searchBar
+            searchBar(theme: theme)
             if items.isEmpty {
                 Spacer()
                 Text(
@@ -213,7 +214,8 @@ private struct RegisterMenuView: View {
                             ForEach(Array(items.enumerated()), id: \.element.id) { idx, register in
                                 RegisterCard(
                                     register: register,
-                                    isSelected: idx == menu.selectedIndex
+                                    isSelected: idx == menu.selectedIndex,
+                                    theme: theme
                                 )
                                 .id(register.id)
                                 .contentShape(RoundedRectangle(cornerRadius: 10))
@@ -226,8 +228,8 @@ private struct RegisterMenuView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, theme.cardPaddingX)
+                        .padding(.vertical, theme.cardPaddingY)
                     }
                     // Keep the selected card visible as the user moves through
                     // with ←/→. Without this, arrow-driven selection silently
@@ -241,13 +243,13 @@ private struct RegisterMenuView: View {
                 }
             }
         }
-        .padding(12)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .frame(width: 920, height: 380)
+        .padding(theme.viewPadding)
+        .background(theme.material.swiftUI)
+        .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
+        .frame(width: CGFloat(theme.width), height: CGFloat(theme.height))
     }
 
-    private var searchBar: some View {
+    private func searchBar(theme: RegisterMenuTheme) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
@@ -263,10 +265,10 @@ private struct RegisterMenuView: View {
             }
             Spacer()
             Text("\(menu.filteredRegisters.count)")
-                .font(.system(size: 11, design: .monospaced))
+                .font(theme.badgeFont.swiftUI)
                 .foregroundColor(.secondary)
         }
-        .font(.system(size: 13))
+        .font(theme.searchFont.swiftUI)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -278,6 +280,7 @@ private struct RegisterMenuView: View {
 private struct RegisterCard: View {
     let register: Register
     let isSelected: Bool
+    let theme: RegisterMenuTheme
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -301,17 +304,21 @@ private struct RegisterCard: View {
             Divider().opacity(0.4)
             footer
         }
-        .frame(width: 220, height: 280)
+        .frame(width: CGFloat(theme.cardWidth), height: CGFloat(theme.cardHeight))
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(
-                    isSelected ? Color.accentColor : Color.white.opacity(0.08),
+                    (isSelected ? theme.selectedCardBorder : theme.unselectedCardBorder).swiftUI,
                     lineWidth: isSelected ? 2 : 1
                 )
         )
-        .shadow(color: .black.opacity(isSelected ? 0.35 : 0.15), radius: isSelected ? 8 : 3, y: 2)
+        .shadow(
+            color: (isSelected ? theme.cardShadowSelected : theme.cardShadowUnselected).swiftUI,
+            radius: isSelected ? 8 : 3,
+            y: 2
+        )
     }
 
     private func header(source: (name: String, icon: NSImage)?) -> some View {
@@ -326,16 +333,16 @@ private struct RegisterCard: View {
                     .frame(width: 18, height: 18)
             }
             Text(source?.name ?? "Unknown")
-                .font(.system(size: 11, weight: .medium))
+                .font(theme.appNameFont.swiftUI)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer()
             Text("\"\(register.register)")
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(theme.registerLabelFont.swiftUI)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.accentColor.opacity(0.35))
+                .background(theme.registerBadgeBackground.swiftUI)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
         }
         .padding(.horizontal, 10)
@@ -354,7 +361,7 @@ private struct RegisterCard: View {
                     .padding(8)
             } else if let text, !text.isEmpty {
                 Text(text)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(theme.cardTextFont.swiftUI)
                     .lineLimit(10)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -371,7 +378,7 @@ private struct RegisterCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Color.black.opacity(0.08))
+        .background(theme.contentBackground.swiftUI)
     }
 
     private var footer: some View {
