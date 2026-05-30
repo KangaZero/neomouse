@@ -140,8 +140,24 @@ extension NeoMouse {
                 MarksMenu.shared.selectNext()
             case charToKeyCodeMap["Return"], charToKeyCodeMap["Enter"]:
                 MarksMenu.shared.activateSelected()
+            case charToKeyCodeMap["Backspace"], charToKeyCodeMap["Delete"]:
+                MarksMenu.shared.deleteLastSearchChar()
             default:
-                break
+                // Same printable-character gate as the .register branch:
+                // reject Cmd/Ctrl/Opt chords, allow Shift+Caps, skip C0
+                // controls + DEL so arrow / function keys don't leak into
+                // the search buffer.
+                guard
+                    event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                        .isSubset(of: [.shift, .capsLock])
+                else { return }
+                guard let chars = event.characters, !chars.isEmpty else { return }
+                guard
+                    chars.unicodeScalars.allSatisfy({
+                        $0.value >= 0x20 && $0.value != 0x7F
+                    })
+                else { return }
+                MarksMenu.shared.appendSearchChar(chars)
             }
         case .register:
             switch event.keyCode {

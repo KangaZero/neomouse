@@ -112,15 +112,31 @@ final class RegisterMenu: ObservableObject {
         selectedIndex = (selectedIndex - 1 + arr.count) % arr.count
     }
 
+    /// Mirrors `CoreOperations.pasteFromRegister`: write the selected
+    /// register's content to NSPasteboard, hide the menu, return to normal
+    /// mode, then simulate ⌘V into whichever app was focused when the menu
+    /// opened. The nonactivating panel never stole app focus, so the
+    /// underlying app is still the one that receives the paste.
     func activateSelected() {
         let arr = filteredRegisters
-        guard arr.indices.contains(selectedIndex) else { return }
+        guard arr.indices.contains(selectedIndex), let appState else { return }
         let register = arr[selectedIndex]
-        //TODO write the selected register's pasteboardItem onto
-        //NSPasteboard.general (clear + writeObjects) so the next ⌘V pastes it,
-        //then hide() and return to .normal mode. Mirror the registerAction
-        //paste flow in NeoMouseApp.
-        _ = register
+        guard let item = register.pasteboardItem else {
+            debug("RegisterMenu.activateSelected: register '\(register.register)' has no pasteboardItem")
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([item])
+        hide()
+        appState.mode = .normal(
+            currentPendingOperation: .none, operationCountAsString: nil
+        )
+        // Defer the synthesized ⌘V one runloop tick — gives the panel time
+        // to orderOut and the focused-app chain to settle before the paste
+        // lands, matching the existing pasteFromRegister cadence.
+        DispatchQueue.main.async {
+            System.simulate(.paste)
+        }
     }
 
     // MARK: - Show

@@ -3,6 +3,7 @@ import SwiftUI
 
 import neomouseConfig
 import neomouseDB
+import neomouseTypes
 import neomouseUtils
 
 @MainActor
@@ -14,6 +15,14 @@ final class MarksMenu: ObservableObject {
 
     @Published private(set) var marks: [Mark] = []
     @Published var selectedIndex: Int = 0
+    /// Live search query. Mutated through `appendSearchChar` /
+    /// `deleteLastSearchChar` from the global event-tap (`.menu(.marks)`
+    /// branch). Drives `filteredMarks` and the in-panel search bar.
+    /// Same pattern as RegisterMenu — the nonactivating panel + the global
+    /// CGEventTap means SwiftUI's TextField can't see the keystrokes, so
+    /// we mirror the search field via an @Published String and a plain
+    /// Text view.
+    @Published var searchText: String = ""
 
     var windowID: CGWindowID? {
         window.map { CGWindowID($0.windowNumber) }
@@ -38,6 +47,9 @@ final class MarksMenu: ObservableObject {
 
     func hide() {
         window?.orderOut(nil)
+        // Reset search + selection so the next open starts clean.
+        searchText = ""
+        selectedIndex = 0
     }
 
     /// Re-fetch marks from the DB into `marks`. Call from any code path that
@@ -47,35 +59,94 @@ final class MarksMenu: ObservableObject {
     func refresh() {
         guard let sessionId = appState?.currentSession?.id else { return }
         marks = Mark.getAll(sessionId: sessionId) ?? []
-        if selectedIndex >= marks.count {
-            selectedIndex = max(0, marks.count - 1)
+        // Re-clamp selection against the (possibly newly-filtered) list.
+        let bound = max(0, filteredMarks.count - 1)
+        if selectedIndex > bound { selectedIndex = bound }
+    }
+
+    /// Case-insensitive contains match on the mark name (typically a single
+    /// char) and the screen's localized name. Returns the full list when the
+    /// query is empty. Cheap — marks per session are O(letters of the
+    /// alphabet) so a per-keystroke recompute is fine.
+    var filteredMarks: [Mark] {
+        guard !searchText.isEmpty else { return marks }
+        let q = searchText.lowercased()
+        return marks.filter { mark in
+            if mark.mark.lowercased().contains(q) { return true }
+            // Match on display name of the screen the mark lives on, so the
+            // user can narrow with e.g. "built" / "studio".
+            let pt = CGPoint(x: mark.endCGXPoint, y: mark.endCGYPoint)
+            if let screen = NSScreen.screens.first(where: { s in
+                guard
+                    let num = s.deviceDescription[
+                        NSDeviceDescriptionKey("NSScreenNumber")
+                    ] as? NSNumber
+                else { return false }
+                return CGDisplayBounds(num.uint32Value).contains(pt)
+            }), screen.localizedName.lowercased().contains(q) {
+                return true
+            }
+            return false
         }
     }
 
     // MARK: - Public keyboard API
     // The global CGEventTap routes keys through NeoMouseApp.keyHandler (the
-    // panel never becomes key window), so NeoMouseApp's `case .menu:` calls
-    // these on Up/Down/Enter rather than SwiftUI `.onKeyPress`.
+    // panel never becomes key window), so KeyHandlers' `case .menu:` calls
+    // these on ↑/↓/Return/printables/Backspace rather than SwiftUI .onKeyPress.
 
     func selectNext() {
-        guard !marks.isEmpty else { return }
-        selectedIndex = (selectedIndex + 1) % marks.count
+        let arr = filteredMarks
+        guard !arr.isEmpty else { return }
+        selectedIndex = (selectedIndex + 1) % arr.count
     }
 
     func selectPrev() {
-        guard !marks.isEmpty else { return }
-        selectedIndex = (selectedIndex - 1 + marks.count) % marks.count
+        let arr = filteredMarks
+        guard !arr.isEmpty else { return }
+        selectedIndex = (selectedIndex - 1 + arr.count) % arr.count
     }
 
+    func appendSearchChar(_ s: String) {
+        searchText.append(s)
+        selectedIndex = 0
+    }
+
+    func deleteLastSearchChar() {
+        guard !searchText.isEmpty else { return }
+        searchText.removeLast()
+        selectedIndex = 0
+    }
+
+    /// Activate the selected mark — mirrors the existing
+    /// `case .goToMarkExactState:` branch in KeyHandlers.handleNormalMode:
+    /// warp the cursor to the mark's end CG point, restore the visual
+    /// selection if the mark was set in visual mode, hide the menu, and
+    /// return to normal mode.
     func activateSelected() {
-        guard marks.indices.contains(selectedIndex) else { return }
-        let mark = marks[selectedIndex]
-        //TODO navigate the cursor to the selected mark — mirror the goToMark
-        //flow in NeoMouseApp (Mouse.moveToGlobal to mark.endCG{X,Y}Point, and
-        //if mark.isVisual restore start/end onto appState +
-        //VisualHighlightOverlay.shared.passAppState), then hide() and return
-        //to .normal mode.
-        _ = mark
+        let arr = filteredMarks
+        guard arr.indices.contains(selectedIndex), let appState else { return }
+        let mark = arr[selectedIndex]
+
+        // Restore visual state when the mark was set in visual mode — same
+        // semantics as backtick (`` ` ``) / `.goToMarkExactState` from
+        // normal mode. Plain Enter from this menu always restores exactly
+        // (no separate "approximate vs exact" affordance like vim's ' vs `).
+        appState.isVisual = mark.isVisual
+        if mark.isVisual,
+            let startX = mark.startCGXPoint, let startY = mark.startCGYPoint
+        {
+            appState.visual = NeomouseType.VisualState(
+                startPos: CGPoint(x: startX, y: startY),
+                endPos: CGPoint(x: mark.endCGXPoint, y: mark.endCGYPoint)
+            )
+            VisualHighlightOverlay.shared.passAppState(state: appState)
+        }
+        Mouse.moveToGlobal(x: mark.endCGXPoint, y: mark.endCGYPoint)
+        hide()
+        appState.mode = .normal(
+            currentPendingOperation: .none, operationCountAsString: nil
+        )
     }
 
     // MARK: - Show
@@ -172,41 +243,86 @@ private struct MarksMenuView: View {
 
     var body: some View {
         let theme = state.theme.marksMenu
+        let items = menu.filteredMarks
         VStack(spacing: 0) {
+            searchBar(theme: theme)
+                .padding(.horizontal, theme.rowPaddingX)
+                .padding(.vertical, 6)
+            Divider().opacity(0.4)
             header(theme: theme)
             Divider().opacity(0.4)
-            if menu.marks.isEmpty {
-                Text("No marks in current session")
-                    .font(theme.emptyMessageFont.swiftUI)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+            if items.isEmpty {
+                Text(
+                    menu.searchText.isEmpty
+                        ? "No marks in current session"
+                        : "No matches for \"\(menu.searchText)\""
+                )
+                .font(theme.emptyMessageFont.swiftUI)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(menu.marks.enumerated()), id: \.element.id) { idx, mark in
-                            MarkRow(
-                                mark: mark,
-                                isSelected: idx == menu.selectedIndex,
-                                state: state
-                            )
-                            .contentShape(Rectangle())
-                            .onHover { hovering in
-                                if hovering { menu.selectedIndex = idx }
-                            }
-                            .onTapGesture {
-                                menu.selectedIndex = idx
-                                menu.activateSelected()
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { idx, mark in
+                                MarkRow(
+                                    mark: mark,
+                                    isSelected: idx == menu.selectedIndex,
+                                    state: state
+                                )
+                                .id(mark.id)
+                                .contentShape(Rectangle())
+                                .onHover { hovering in
+                                    if hovering { menu.selectedIndex = idx }
+                                }
+                                .onTapGesture {
+                                    menu.selectedIndex = idx
+                                    menu.activateSelected()
+                                }
                             }
                         }
                     }
+                    .frame(maxHeight: CGFloat(theme.height))
+                    // Keep the selected row visible as ↑/↓ moves selection
+                    // past the viewport edge.
+                    .onChange(of: menu.selectedIndex) { _, new in
+                        guard items.indices.contains(new) else { return }
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(items[new].id, anchor: .center)
+                        }
+                    }
                 }
-                .frame(maxHeight: CGFloat(theme.height))
             }
         }
         .background(theme.material.swiftUI)
         .clipShape(RoundedRectangle(cornerRadius: theme.cornerRadius))
         .frame(width: CGFloat(theme.width))
+    }
+
+    /// Static-display search bar — same pattern as RegisterMenu. The global
+    /// event tap consumes keys before SwiftUI sees them, so the field is
+    /// driven from KeyHandlers' `case .menu(.marks):` keystroke branch via
+    /// `menu.appendSearchChar` / `deleteLastSearchChar`.
+    private func searchBar(theme: MarksMenuTheme) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            if menu.searchText.isEmpty {
+                Text("Search marks by name or screen")
+                    .foregroundColor(.secondary)
+            } else {
+                Text(menu.searchText)
+                    .foregroundColor(.primary)
+            }
+            Spacer()
+            Text("\(menu.filteredMarks.count)")
+                .foregroundColor(.secondary)
+        }
+        .font(theme.cellFont.swiftUI)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func header(theme: MarksMenuTheme) -> some View {

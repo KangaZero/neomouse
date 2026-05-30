@@ -37,8 +37,27 @@ increments_per_gesture = 5
 degrees_to_rotate = 90.0
 
 [commands]
-# Commands exposed in command-line mode.
-available = ["numbers", "relativenumbers", "delmarks"]
+# Commands exposed in command-line mode. Each canonical name has a short
+# alias (vim convention): `nu` = `numbers`, `rnu` = `relativenumbers`,
+# `cul` = `cursorline`, `cuc` = `cursorcolumn`, `c` = `cursor`,
+# `reg` = `registers`, `ju` = `jumps`, `h` = `help`, `delm` = `delmarks`,
+# `m` = `marks`, `r` = `restart`, `q` = `quit`. The CommandLine suggestion
+# popup hides aliases under 4 characters so the list stays uncluttered;
+# typing the alias still works.
+available = [
+  "numbers", "nu",
+  "relativenumbers", "rnu",
+  "cursorline", "cul",
+  "cursorcolumn", "cuc",
+  "cursor", "c",
+  "registers", "reg",
+  "jumps", "ju",
+  "help", "h",
+  "delmarks", "delm",
+  "marks", "m",
+  "restart", "r",
+  "quit", "q",
+]
 
 [configuration]
 # When true, the CGEventTap runs in .defaultTap mode and swallows most plain
