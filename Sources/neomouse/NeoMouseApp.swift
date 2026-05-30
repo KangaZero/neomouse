@@ -200,13 +200,13 @@ struct NeoMouse: App {
 
         //TODO Reenable once able to have register when proper content copying
         // Seed register "0" with whatever's on the clipboard at launch.
-        // if let currentPasteboardItem = Pasteboard.getFirst() {
-        //     Register.set(
-        //         register: "0",
-        //         item: currentPasteboardItem,
-        //         sessionId: currentSession.id!)
-        //     debug("Pasteboard: \(Pasteboard.preview(currentPasteboardItem))")
-        // }
+        if let currentPasteboardItem = Pasteboard.getFirst() {
+            Register.set(
+                register: "0",
+                item: currentPasteboardItem,
+                sessionId: currentSession.id!)
+            // debug("Pasteboard: \(Pasteboard.preview(currentPasteboardItem))")
+        }
         debug("currentSession: \(String(describing: currentSession))")
         let _allScreensBoundingRect = Screen.allBoundingRect()
         debug("allScreensRect: \(String(describing: _allScreensBoundingRect))")
@@ -1765,13 +1765,17 @@ struct NeoMouse: App {
                         Pasteboard.dump()
                         if let item = Pasteboard.getFirst() {
                             debug("Clipboard changed: \(Pasteboard.preview(item))")
-                            //WARNING: Adding this will disrupt if a there is registerCurrentPasteboardItem in the current copy event
-                            //     if let currentSession = NeoMouse.sharedState.currentSession {
-                            //         CoreOperations.registerCurrentPasteboardItem(
-                            //             currentSession: currentSession, activeRegister: "0")
-                            //     } else {
-                            //         debug("No current session found, cannot register clipboard item to register '0'")
-                            //     }
+                            if let sessionId = NeoMouse.sharedState.currentSession?.id {
+                                // Vim-style numbered-register cycle: shifts
+                                // "1"–"9" up by one slot, drops "9", writes
+                                // the new item to both "1" and "0" in a
+                                // single transaction. See Register
+                                // .cycleNumbered for the full contract.
+                                Register.cycleNumbered(item: item, sessionId: sessionId)
+                                RegisterMenu.shared.refresh()
+                            } else {
+                                debug("No current session id; skipping numbered-register cycle")
+                            }
                         }
                     }
                 }

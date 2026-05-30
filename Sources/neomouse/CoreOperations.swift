@@ -136,6 +136,47 @@ extension NeoMouse {
         }
 
         @MainActor
+        static func autoRegisterToNumeralsCurrentPasteboardItem(
+            currentSession: Session
+        ) {
+            let initialChangeCount = NSPasteboard.general.changeCount
+            Pasteboard.waitForChange(after: initialChangeCount) { pasteboardItem in
+                guard let pasteboardItem else {
+                    return debug(
+                        "autoRegisterToNumeralsCurrentPasteboardItem - timed out waiting for pasteboard change for numeral registers"
+                    )
+                }
+                var isNotFilledNumeralRegisterExists = false
+                for numeral in 1...9 {
+                    let isExistingNumeralRegister =
+                        Register.get(
+                            register: "\(numeral)", sessionId: currentSession.id!) != nil
+                    if isExistingNumeralRegister {
+                        continue
+                    } else {
+                        Register.set(
+                            register: "\(numeral)",
+                            item: pasteboardItem,
+                            sessionId: currentSession.id!
+                        )
+                        isNotFilledNumeralRegisterExists = true
+                        break
+                    }
+                }
+                if !isNotFilledNumeralRegisterExists {
+                    debug(
+                        "autoRegisterToNumeralsCurrentPasteboardItem - all numeral registers already filled, skipping auto-registering to numeral registers"
+                    )
+                    return
+                }
+                RegisterMenu.shared.refresh()
+                debug(
+                    "autoRegisterToNumeralsCurrentPasteboardItem - Copied pasteboard item to numeral registers: \(Pasteboard.preview(pasteboardItem))"
+                )
+            }
+        }
+
+        @MainActor
         static func delete(event: NSEvent, appState: NeoMouseState, currentSession: Session) {
             //TODO: consider moving modifier flag check to caller (NeoMouseApp)
             //As functions should ideally just do one thing

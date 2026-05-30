@@ -158,6 +158,90 @@ public struct Register: Codable, Identifiable, FetchableRecord, MutablePersistab
         return nil
     }
 
+    /// Vim-style numbered-register cycle. The numbered registers "1"–"9"
+    /// form a 9-slot FIFO ring; each call shifts existing entries up by one
+    /// slot ("1"→"2", "2"→"3", …, "8"→"9", "9" falls off the end), then
+    /// writes `item` to register "1". The same content is also mirrored to
+    /// register "0" (Vim's "last yank" register) so the most recent yank is
+    /// reachable by name regardless of how many subsequent copies happened.
+    ///
+    /// Atomicity: every read + rename + insert runs inside a single
+    /// `dbQueue.write` transaction so a concurrent pasteboard change can't
+    /// tear the ring mid-shift.
+    ///
+    /// Identity-preserving shift: rather than re-encoding each ring entry,
+    /// the shift just updates the `register` column on existing rows. That
+    /// keeps `createdAt` / `originURL` / `sourceAppBundleId` attached to the
+    /// content as it moves up the ring — matches Vim's "content's identity
+    /// stays, only its slot changes" semantics, and is what the RegisterMenu
+    /// surface expects (each card's metadata reflects when *that yank*
+    /// happened, not when it was last cycled).
+    public static func cycleNumbered(item: NSPasteboardItem, sessionId: Int64) {
+        do {
+            let newContent = try encode(item)
+            let originURL = extractOriginURL(from: item)
+            let bundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let now = Date()
+
+            try dbQueue.write { db in
+                // Shift order matters because of the (sessionId, register)
+                // unique constraint: every rename target must be empty when
+                // we rename into it. Delete "9" first to make room for "8",
+                // then walk 8→1 in reverse so each step renames into a slot
+                // emptied by the previous step.
+                try Register
+                    .filter(Columns.sessionId == sessionId)
+                    .filter(Columns.register == "9")
+                    .deleteAll(db)
+                for i in stride(from: 8, through: 1, by: -1) {
+                    let src = "\(i)"
+                    let dst = "\(i + 1)"
+                    if var existing =
+                        try Register
+                        .filter(Columns.sessionId == sessionId)
+                        .filter(Columns.register == src)
+                        .fetchOne(db)
+                    {
+                        existing.register = dst
+                        try existing.update(db)
+                    }
+                }
+
+                // After the shift "1" is empty; "0" may or may not exist.
+                // Upsert both so the new content lands in both slots with
+                // fresh metadata (createdAt/originURL/sourceAppBundleId
+                // reflect *this* clipboard event, not whatever happened to
+                // be in "0" before).
+                for target in ["1", "0"] {
+                    if var existing =
+                        try Register
+                        .filter(Columns.sessionId == sessionId)
+                        .filter(Columns.register == target)
+                        .fetchOne(db)
+                    {
+                        existing.content = newContent
+                        existing.originURL = originURL
+                        existing.sourceAppBundleId = bundleId
+                        existing.createdAt = now
+                        try existing.update(db)
+                    } else {
+                        var newReg = Register(
+                            register: target,
+                            content: newContent,
+                            originURL: originURL,
+                            sourceAppBundleId: bundleId,
+                            createdAt: now,
+                            sessionId: sessionId
+                        )
+                        try newReg.insert(db)
+                    }
+                }
+            }
+        } catch {
+            debug("Register.cycleNumbered error: ", error)
+        }
+    }
+
     public static func delete(register: String, sessionId: Int64) {
         do {
             try dbQueue.write { db in
