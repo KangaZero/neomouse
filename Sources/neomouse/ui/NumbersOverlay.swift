@@ -60,10 +60,15 @@ final class NumbersOverlay {
         /// `state.gridInset`. Keeps the ruler from butting up against the
         /// physical bezel / notch / corners.
         @Published var inset: CGFloat = 0
+        /// Live theme handle so hot-reload of `[theme.numbers_overlay]`
+        /// republishes into the SwiftUI view (the host view was created with
+        /// a captured-by-value theme that wouldn't otherwise see the update).
+        @Published var theme: NumbersOverlayTheme = NumbersOverlayTheme()
     }
 
     let model = Model()
     private var window: NSWindow?
+    private var themeCancellable: AnyCancellable?
 
     var windowID: CGWindowID? {
         window.map { CGWindowID($0.windowNumber) }
@@ -86,6 +91,28 @@ final class NumbersOverlay {
 
     func passAppState(state: NeoMouseState) {
         appState = state
+        model.theme = state.theme.numbersOverlay
+        // Pipe future theme republishes (from SettingsWatcher hot reload) into
+        // the model so the SwiftUI view picks them up. Also re-anchor the
+        // window if gutter_width / column_strip_height changed.
+        themeCancellable = state.$theme
+            .map(\.numbersOverlay)
+            .removeDuplicates { lhs, rhs in
+                // Compare on a stable derived hash — NumbersOverlayTheme is
+                // not Equatable on the whole struct (font/color sub-types
+                // are), so the conservative path is "always re-publish."
+                return false
+            }
+            .sink { [weak self] newTheme in
+                MainActor.assumeIsolated {
+                    self?.model.theme = newTheme
+                    if let appState = self?.appState, let screen = self?.anchoredScreen {
+                        self?.anchorWindow(to: screen)
+                        self?.recomputeIndices(mouseLocation: NSEvent.mouseLocation)
+                        _ = appState  // appease unused-binding
+                    }
+                }
+            }
     }
 
     /// Toggle a label mode. Same-mode → labels off (window may stay if a
@@ -174,9 +201,7 @@ final class NumbersOverlay {
             win.ignoresMouseEvents = true
             win.isReleasedWhenClosed = false
             win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            let theme = appState?.theme.numbersOverlay ?? NumbersOverlayTheme()
-            win.contentView = NSHostingView(
-                rootView: NumbersOverlayView(model: model, theme: theme))
+            win.contentView = NSHostingView(rootView: NumbersOverlayView(model: model))
             window = win
         }
         window?.setFrame(Self.rectForScreen(currentScreen), display: true)
@@ -358,7 +383,9 @@ final class NumbersOverlay {
 
 struct NumbersOverlayView: View {
     @ObservedObject var model: NumbersOverlay.Model
-    let theme: NumbersOverlayTheme
+    /// Theme read off the @Published `model.theme` so SettingsWatcher
+    /// hot-reload republishes propagate without re-creating the host view.
+    var theme: NumbersOverlayTheme { model.theme }
 
     var body: some View {
         // Drive layout from `screenFrame` directly instead of a

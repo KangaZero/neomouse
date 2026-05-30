@@ -54,12 +54,13 @@ class NeoMouseState: ObservableObject {
     let modeOnStart: NeomouseType.ConfigMode
     //TODO add the rest
 
-    // User-overridable visual theme for every overlay / menu / toast. Read
-    // by the UI singletons (GridOverlay / NumbersOverlay / ToastManager /
-    // …) via `passAppState`. Defaults match the original hardcoded values
-    // so a settings.toml with no `[theme.*]` blocks renders identically to
-    // the pre-theme app.
-    let theme: Config.Theme
+    // User-overridable visual theme for every overlay / menu / toast.
+    // `@Published` so `SettingsWatcher` can republish a new value on every
+    // settings.toml save and SwiftUI views observing `state` (via
+    // `@ObservedObject`) automatically re-render. Defaults match the
+    // original hardcoded values so a settings.toml with no `[theme.*]`
+    // blocks renders identically to the pre-theme app.
+    @Published var theme: Config.Theme
 
     // Single init covers both paths: when neomouseConfig finds settings.toml,
     // every property comes from there; otherwise each falls back to the same
@@ -114,6 +115,25 @@ class NeoMouseState: ObservableObject {
         }()
     }
 
+    /// Live-reload the subset of settings that can change at runtime without
+    /// re-installing event taps / re-loading the DB / etc. Called by
+    /// `SettingsWatcher` on every successful re-decode of settings.toml.
+    ///
+    /// Currently reloadable: `[theme.*]` — colors, fonts, sizes, anchors. All
+    /// SwiftUI views that read `state.theme.X` inside `body` redraw
+    /// automatically because `theme` is `@Published`. Panels that captured
+    /// theme at panel-creation time (CommandLine, MarksMenu, RegisterMenu,
+    /// HelpDialog) pick up changes on next show — close-and-reopen.
+    ///
+    /// Not reloadable (require restart, with no toast nag because users
+    /// rarely change them): `is_disable_key_input` (CGEventTap mode swap is
+    /// risky), `mode_on_start` (only meaningful at launch), `max_session_count`
+    /// (retroactive DB truncation is awkward), `[commands] available`
+    /// (wildmenu cache would need a rebuild).
+    func reload(from config: Config) {
+        theme = config.theme ?? Config.Theme()
+    }
+
     /// Baseline cell size in points used when both axes are `.automatic`
     /// (or when rows auto + we need a starting cell height to square cols
     /// against). 20pt matches the old fixed `range_x`/`range_y` defaults
@@ -164,6 +184,7 @@ struct NeoMouse: App {
     static var pasteboardWatcher: Timer?
     static var modeObserver: AnyCancellable?
     static var isVisualObserver: AnyCancellable?
+    static var settingsWatcher: SettingsWatcher?
     static let sharedState: NeoMouseState = {
         // Deploy the bundled default `settings.toml` to ~/.config/neomouse/
         // on first launch so brew/nix/manual installs all get a usable
@@ -1838,6 +1859,25 @@ struct NeoMouse: App {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Hot reload: watch the resolved settings.toml for writes; on every
+        // successful re-decode, push the new theme into appState (which is
+        // @Published → SwiftUI views observing `state` re-render). Decode
+        // failures keep the old config in place and surface the error via
+        // toast so the user knows what to fix without scraping the log file.
+        NeoMouse.settingsWatcher = SettingsWatcher { result in
+            MainActor.assumeIsolated {
+                switch result {
+                case .success(let config):
+                    appState.reload(from: config)
+                    debug("SettingsWatcher: reloaded \(Config.resolvedURL?.path ?? "<unknown>")")
+                    ToastManager.shared.show("Reloaded settings.toml")
+                case .failure(let error):
+                    debug("SettingsWatcher: reload failed — \(error)")
+                    ToastManager.shared.show("Reload failed: \(error)")
                 }
             }
         }

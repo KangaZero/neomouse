@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NeoMouse.isVisualObserver = nil
         NeoMouse.modeObserver?.cancel()
         NeoMouse.modeObserver = nil
+        NeoMouse.settingsWatcher?.stop()
+        NeoMouse.settingsWatcher = nil
         NeoMouse.pasteboardWatcher?.invalidate()
         NeoMouse.pasteboardWatcher = nil
 
