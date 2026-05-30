@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # Cut a new release of neomouse.
 #
-# Usage: scripts/release.sh vX.Y.Z
+# Usage:
+#   scripts/release.sh vX.Y.Z              # full release: tag, push, GitHub
+#                                            Release, Homebrew + flake bumps
+#   DRY_RUN=1 scripts/release.sh vX.Y.Z    # build + sign + package only;
+#                                            stop before anything touches a
+#                                            remote (no git tag, no gh release,
+#                                            no formula bump, no flake push)
+#   SKIP_HOMEBREW=1 scripts/release.sh …   # skip just the Homebrew tap bump
+#   SKIP_FLAKE=1    scripts/release.sh …   # skip just the flake.nix bump
 #
-# Builds, ad-hoc signs, packages, tags, pushes, and publishes a GitHub Release,
-# then bumps Formula/neomouse.rb in KangaZero/homebrew-neomouse to the new
-# url/sha256/version and pushes that update.
-#
-# Set SKIP_HOMEBREW=1 to skip the Homebrew tap bump.
+# DRY_RUN is for `just release-local` / local end-to-end testing of the
+# release tarball before cutting an actual release.
 
 set -euo pipefail
+DRY_RUN="${DRY_RUN:-}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -27,7 +33,10 @@ fail() {
 VERSION="$1"
 # accept either "0.1.0" or "v0.1.0"
 [[ "$VERSION" =~ ^v ]] || VERSION="v$VERSION"
-[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Version must be vX.Y.Z (got: $VERSION)"
+# Strict semver, with an optional pre-release suffix (`-rc1`, `-local`, etc.).
+# The suffix path is useful for DRY_RUN test builds and for real RC releases.
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] ||
+  fail "Version must be vX.Y.Z (optionally with -suffix); got: $VERSION"
 
 # ---------- preconditions ----------
 
@@ -37,22 +46,26 @@ command -v gh >/dev/null || fail "gh CLI not installed (brew install gh)"
 command -v swift >/dev/null || fail "swift toolchain not found"
 gh auth status >/dev/null 2>&1 || fail "gh is not authenticated (run: gh auth login)"
 
-BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-[[ "$BRANCH" == "main" ]] || fail "Not on main (on: $BRANCH)"
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "  DRY_RUN: skipping branch / tag / origin-sync checks (local test build)"
+else
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  [[ "$BRANCH" == "main" ]] || fail "Not on main (on: $BRANCH)"
 
-[[ -z "$(git status --porcelain)" ]] || fail "Working tree is dirty. Commit or stash first."
+  [[ -z "$(git status --porcelain)" ]] || fail "Working tree is dirty. Commit or stash first."
 
-git rev-parse "$VERSION" >/dev/null 2>&1 && fail "Tag $VERSION already exists locally."
-git ls-remote --exit-code --tags origin "$VERSION" >/dev/null 2>&1 &&
-  fail "Tag $VERSION already exists on origin."
+  git rev-parse "$VERSION" >/dev/null 2>&1 && fail "Tag $VERSION already exists locally."
+  git ls-remote --exit-code --tags origin "$VERSION" >/dev/null 2>&1 &&
+    fail "Tag $VERSION already exists on origin."
 
-git fetch --quiet origin
-[[ "$(git rev-parse main)" == "$(git rev-parse origin/main)" ]] ||
-  fail "Local main differs from origin/main. Pull or push first."
+  git fetch --quiet origin
+  [[ "$(git rev-parse main)" == "$(git rev-parse origin/main)" ]] ||
+    fail "Local main differs from origin/main. Pull or push first."
+fi
 
-echo "  branch: main"
+echo "  branch: $(git rev-parse --abbrev-ref HEAD)"
 echo "  commit: $(git rev-parse --short HEAD)"
-echo "  tag:    $VERSION"
+echo "  tag:    $VERSION$([ "$DRY_RUN" = "1" ] && echo "  (DRY_RUN — not actually tagged)")"
 
 # ---------- build ----------
 
@@ -77,7 +90,12 @@ APP_STAGE="dist/build"
 APP_DIR="$APP_STAGE/neomouse.app"
 rm -rf "$APP_STAGE"
 mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/Resources"
 cp Info.plist "$APP_DIR/Contents/Info.plist"
+# Ships the default config inside the bundle so first launch can auto-deploy
+# it to ~/.config/neomouse/settings.toml. See deployBundledDefaultsIfMissing
+# in Sources/neomouse/NeoMouseApp.swift.
+cp settings.toml "$APP_DIR/Contents/Resources/settings.toml"
 cp "$BIN" "$APP_DIR/Contents/MacOS/neomouse"
 
 # ---------- sign ----------
@@ -108,6 +126,29 @@ ls -la "$ARCHIVE" "$ARCHIVE.sha256"
 HASH_HEX="$(awk '{print $1}' "$ARCHIVE.sha256")"
 ASSET_URL="https://github.com/KangaZero/neomouse/releases/download/${VERSION}/${ARCHIVE_NAME}"
 BARE_VERSION="${VERSION#v}"
+
+# ---------- dry-run short-circuit ----------
+#
+# Everything above produces local artifacts (the .app bundle, the tarball,
+# the .sha256). Everything below touches a remote — tagging, pushing,
+# creating a GitHub Release, bumping the Homebrew tap, bumping flake.nix.
+# DRY_RUN stops here so you can test the local artifacts before committing
+# to a real release.
+if [[ "$DRY_RUN" == "1" ]]; then
+  step "DRY_RUN: skipping tag, push, gh release, Homebrew + flake bumps"
+  echo
+  echo "Local artifacts:"
+  echo "  $ARCHIVE"
+  echo "  $ARCHIVE.sha256"
+  echo
+  echo "Try it locally:"
+  echo "  TEMP=\$(mktemp -d)"
+  echo "  tar -xzf $ARCHIVE -C \"\$TEMP\""
+  echo "  xattr -dr com.apple.quarantine \"\$TEMP/neomouse.app\""
+  echo "  open \"\$TEMP/neomouse.app\""
+  echo "  # then: look for the cursor icon in your menu bar"
+  exit 0
+fi
 
 # ---------- tag + push ----------
 

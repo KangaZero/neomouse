@@ -29,14 +29,18 @@ class Neomouse < Formula
         open #{opt_prefix}/neomouse.app
         #{opt_prefix}/neomouse.app/Contents/MacOS/neomouse
 
-      First launch: macOS will prompt for Accessibility permissions.
-      Allow `neomouse` in System Settings → Privacy & Security → Accessibility,
-      then relaunch.
+      First launch:
+        - macOS will prompt for Accessibility permissions. Allow `neomouse` in
+          System Settings → Privacy & Security → Accessibility, then relaunch.
+        - The bundled default `settings.toml` is copied to
+          ~/.config/neomouse/settings.toml (only if no file is already there).
+          Edit that file to customize; the deploy never overwrites your config.
     EOS
   end
 
   test do
     assert_predicate bin/"neomouse", :executable?
     assert_predicate prefix/"neomouse.app/Contents/Info.plist", :exist?
+    assert_predicate prefix/"neomouse.app/Contents/Resources/settings.toml", :exist?
   end
 end

@@ -23,10 +23,15 @@ release:
 # MenuBarExtra registers a status item (LaunchServices only reads bundle
 # metadata from .app/Contents/Info.plist — embedding the Info.plist into
 # the bare Mach-O's __TEXT,__info_plist section is not sufficient).
-# Args: $1 = build config dir ("debug" / "release"), $2 = output app dir name.
+# Also bundles settings.toml under Contents/Resources/ so the app can
+# auto-deploy a default config to ~/.config/neomouse/ on first launch
+# (see deployBundledDefaultsIfMissing in NeoMouseApp.swift).
+# Args: $1 = build config dir ("debug" / "release").
 _app config:
     @mkdir -p ".build/{{config}}/neomouse.app/Contents/MacOS"
+    @mkdir -p ".build/{{config}}/neomouse.app/Contents/Resources"
     @cp Info.plist ".build/{{config}}/neomouse.app/Contents/Info.plist"
+    @cp settings.toml ".build/{{config}}/neomouse.app/Contents/Resources/settings.toml"
     @cp ".build/{{config}}/neomouse" ".build/{{config}}/neomouse.app/Contents/MacOS/neomouse"
 
 # Build + assemble debug .app, then run it from inside the bundle so stdout
@@ -70,6 +75,21 @@ init:
     @mkdir -p ~/.config/neomouse
     @cp settings.toml ~/.config/neomouse/settings.toml
     @echo "Installed default settings to ~/.config/neomouse/settings.toml"
+
+# Dry-run the full release pipeline LOCALLY — produces the exact same
+# artifacts `scripts/release.sh` would (release build, ad-hoc-signed
+# `neomouse.app` bundle inside `dist/neomouse-<version>-macos-arm64.tar.gz`
+# plus its `.sha256`), then stops short of anything that touches a remote:
+# no git tag, no `gh release create`, no Homebrew tap update, no flake bump.
+#
+# Use this to verify a release works end-to-end before cutting it for real.
+# Output lands in `dist/`; the script prints extract + launch instructions
+# at the end. Default version is `v0.0.0-local` so it doesn't collide with
+# real release tags.
+#
+# Usage: `just release-local` (uses v0.0.0-local) or `just release-local v0.0.1-rc1`.
+release-local version="v0.0.0-local":
+    @DRY_RUN=1 scripts/release.sh {{version}}
 
 # Lint + test + config schema check — what the pre-commit hook runs
 check: lint test check-config

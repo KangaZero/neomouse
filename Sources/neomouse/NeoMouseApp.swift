@@ -157,6 +157,12 @@ struct NeoMouse: App {
     static var modeObserver: AnyCancellable?
     static var isVisualObserver: AnyCancellable?
     static let sharedState: NeoMouseState = {
+        // Deploy the bundled default `settings.toml` to ~/.config/neomouse/
+        // on first launch so brew/nix/manual installs all get a usable
+        // template at the standard resolved path — no extra step required.
+        // No-op when the user already has a settings.toml there.
+        deployBundledDefaultsIfMissing()
+
         guard let url = Config.resolvedURL else {
             debug("No settings.toml found at any resolved path; using built-in defaults")
             return NeoMouseState()
@@ -170,6 +176,34 @@ struct NeoMouse: App {
             return NeoMouseState()
         }
     }()
+
+    /// Copy the bundled default `settings.toml` (shipped in the .app at
+    /// `Contents/Resources/settings.toml`) to `~/.config/neomouse/settings.toml`
+    /// if no file is already there. Respects user customizations — never
+    /// overwrites. No source = no-op (this is normal under bare `swift run`
+    /// where Bundle.main has no Resources; devs deploy via `just init`).
+    private static func deployBundledDefaultsIfMissing() {
+        let fm = FileManager.default
+        let target = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/neomouse/settings.toml")
+        if fm.fileExists(atPath: target.path) { return }
+        guard let source = Bundle.main.url(forResource: "settings", withExtension: "toml") else {
+            debug(
+                "No bundled settings.toml in Bundle.main; skipping default deploy (use `just init` for dev)"
+            )
+            return
+        }
+        do {
+            try fm.createDirectory(
+                at: target.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fm.copyItem(at: source, to: target)
+            debug("Deployed default settings.toml from bundle to \(target.path)")
+        } catch {
+            debug("Failed to deploy bundled settings.toml: \(error)")
+        }
+    }
     @StateObject private var appState = NeoMouse.sharedState
     // Bridges SwiftUI's value-type App into AppKit's reference-type lifecycle
     // so we receive applicationWillTerminate before the process exits.

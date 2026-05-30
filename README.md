@@ -134,6 +134,8 @@ mv ./neomouse.app /Applications/
 sudo ln -sf /Applications/neomouse.app/Contents/MacOS/neomouse /usr/local/bin/neomouse
 ```
 
+On first launch, neomouse copies the bundled default `settings.toml` (shipped at `neomouse.app/Contents/Resources/settings.toml`) to `~/.config/neomouse/settings.toml` if no file is already there. Edit that file to customize. The auto-deploy never overwrites an existing config — your customizations are safe across re-installs.
+
 > Why a `.app` bundle and not a bare binary: SwiftUI's `MenuBarExtra` status item only registers when LaunchServices can read `CFBundleIdentifier` from `.app/Contents/Info.plist`. A bare-binary install would launch the daemon but show no menu-bar icon.
 
 ## Development
