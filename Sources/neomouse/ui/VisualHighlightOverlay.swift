@@ -21,19 +21,10 @@ final class VisualHighlightOverlay {
         guard let appState, appState.isVisual == true else { return }
         let unionAppKit = Screen.cgToAppKit(Screen.allBoundingRect())
         if window == nil {
-            let win = NSWindow(
+            window = OverlayWindow.makeFullscreenClickThrough(
                 contentRect: unionAppKit,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
+                rootView: VisualHighlightOverlayView(state: appState)
             )
-            win.isOpaque = false
-            win.backgroundColor = .clear
-            win.level = .screenSaver  // 101
-            win.ignoresMouseEvents = true
-            win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            win.contentView = NSHostingView(rootView: VisualHighlightOverlayView(state: appState))
-            window = win
         }
         window?.setFrame(unionAppKit, display: true)
         window?.orderFrontRegardless()

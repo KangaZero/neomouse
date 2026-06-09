@@ -37,8 +37,27 @@ increments_per_gesture = 5
 degrees_to_rotate = 90.0
 
 [commands]
-# Commands exposed in command-line mode.
-available = ["numbers", "relativenumbers", "delmarks"]
+# Commands exposed in command-line mode. Each canonical name has a short
+# alias (vim convention): `nu` = `numbers`, `rnu` = `relativenumbers`,
+# `cul` = `cursorline`, `cuc` = `cursorcolumn`, `c` = `cursor`,
+# `reg` = `registers`, `ju` = `jumps`, `h` = `help`, `delm` = `delmarks`,
+# `m` = `marks`, `r` = `restart`, `q` = `quit`. The CommandLine suggestion
+# popup hides aliases under 4 characters so the list stays uncluttered;
+# typing the alias still works.
+available = [
+  "numbers", "nu",
+  "relativenumbers", "rnu",
+  "cursorline", "cul",
+  "cursorcolumn", "cuc",
+  "cursor", "c",
+  "registers", "reg",
+  "jumps", "ju",
+  "help", "h",
+  "delmarks", "delm",
+  "marks", "m",
+  "restart", "r",
+  "quit", "q",
+]
 
 [configuration]
 # When true, the CGEventTap runs in .defaultTap mode and swallows most plain
@@ -52,6 +71,15 @@ new_session_on_open = true
 # Which mode neomouse boots into. One of: "disabled", "normal", "find",
 # "command", "menu". "disabled" leaves neomouse dormant until Cmd-E activates.
 mode_on_start = "normal"
+# Vim-style showcmd. When true, a small floating pill above the screen
+# displays the partial pending operation in normal mode (e.g. "g" after
+# pressing g, "5" after typing 5, "5gg" mid-sequence). Hidden when no
+# operation is pending.
+is_show_key_cast = true
+# When true, hjkl cursor motions snap the cursor to the centre of its grid
+# cell while :cursorline / :cursorcolumn is active, so the cursor always lines
+# up with the highlighted band. No effect when no band is showing.
+is_auto_snap = false
 
 # ---------------------------------------------------------------------------
 # [theme.*] — per-element visual overrides
@@ -92,7 +120,8 @@ cursor_surrounded_label_font  = { family = "", size = 14, weight = "semibold", d
 # `direction` flips the gutter to the right edge — useful when a dock or
 # window-manager strip competes with the default left edge.
 [theme.numbers_overlay]
-direction               = "left"        # "left" | "right"
+direction               = "left"       # "left" | "right" — which side the row gutter sits on
+column_strip_direction  = "top"        # "top" | "bottom" — which edge the column strip sits on
 gutter_background       = "#0000008c"  # 0.55 black
 cursor_line_highlight   = "#ffff002e"  # 0.18 yellow
 cursor_column_highlight = "#ffff002e"

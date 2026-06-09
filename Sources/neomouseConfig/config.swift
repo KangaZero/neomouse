@@ -127,11 +127,59 @@ public struct Config: Decodable, Sendable {
         public let maxSessionCount: UInt
         public let newSessionOnOpen: Bool
         public let modeOnStart: NeomouseType.ConfigMode
+        /// Vim-style showcmd. When true, a small floating panel above the
+        /// screen displays the partial pending operation (e.g. "g", "5", "m",
+        /// "5gg") in normal mode. Hidden otherwise.
+        public let isShowKeyCast: Bool
+        /// When true, keyboard cursor motions (hjkl) snap the cursor to the
+        /// centre of its grid cell whenever `:cursorline` / `:cursorcolumn`
+        /// is active, so the cursor always lines up with the highlighted
+        /// band. No-op when no band is showing.
+        public let isAutoSnap: Bool
 
         public static let defaultIsDisableKeyInput: Bool = true
         public static let defaultMaxSessionCount: UInt = 10
         public static let defaultNewSessionOnOpen: Bool = false
         public static let defaultModeOnStart: NeomouseType.ConfigMode = .normal
+        public static let defaultIsShowKeyCast: Bool = true
+        public static let defaultIsAutoSnap: Bool = false
+
+        // Every field has a default — `decodeIfPresent` keeps older
+        // settings.toml files (predating any given key) working. Strict
+        // unknown-key validation still fires for typos.
+        private enum CodingKeys: String, CodingKey, CaseIterable {
+            case isDisableKeyInput
+            case maxSessionCount
+            case newSessionOnOpen
+            case modeOnStart
+            case isShowKeyCast
+            case isAutoSnap
+        }
+
+        public init(from decoder: any Decoder) throws {
+            try validateKnownKeys(
+                decoder: decoder, keyedBy: CodingKeys.self, sectionName: "configuration"
+            )
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.isDisableKeyInput =
+                try c.decodeIfPresent(Bool.self, forKey: .isDisableKeyInput)
+                ?? Self.defaultIsDisableKeyInput
+            self.maxSessionCount =
+                try c.decodeIfPresent(UInt.self, forKey: .maxSessionCount)
+                ?? Self.defaultMaxSessionCount
+            self.newSessionOnOpen =
+                try c.decodeIfPresent(Bool.self, forKey: .newSessionOnOpen)
+                ?? Self.defaultNewSessionOnOpen
+            self.modeOnStart =
+                try c.decodeIfPresent(NeomouseType.ConfigMode.self, forKey: .modeOnStart)
+                ?? Self.defaultModeOnStart
+            self.isShowKeyCast =
+                try c.decodeIfPresent(Bool.self, forKey: .isShowKeyCast)
+                ?? Self.defaultIsShowKeyCast
+            self.isAutoSnap =
+                try c.decodeIfPresent(Bool.self, forKey: .isAutoSnap)
+                ?? Self.defaultIsAutoSnap
+        }
     }
 }
 

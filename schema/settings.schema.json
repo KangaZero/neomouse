@@ -207,6 +207,16 @@
           "enum": ["disabled", "normal", "find", "command", "menu"],
           "default": "normal",
           "description": "Which mode neomouse boots into. 'disabled' leaves it dormant until Cmd-E activates."
+        },
+        "is_show_key_cast": {
+          "type": "boolean",
+          "default": true,
+          "description": "Vim-style showcmd. When true, a small floating pill above the screen displays the partial pending normal-mode operation (e.g. 'g', '5', 'm', '5gg')."
+        },
+        "is_auto_snap": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, hjkl cursor motions snap the cursor to the centre of its grid cell while :cursorline / :cursorcolumn is active, so the cursor always lines up with the highlighted band. No effect when no band is showing."
         }
       }
     },
@@ -238,6 +248,7 @@
           "additionalProperties": false,
           "properties": {
             "direction": { "type": "string", "enum": ["left", "right"] },
+            "column_strip_direction": { "type": "string", "enum": ["top", "bottom"] },
             "gutter_background": { "$ref": "#/$defs/themeColor" },
             "cursor_line_highlight": { "$ref": "#/$defs/themeColor" },
             "cursor_column_highlight": { "$ref": "#/$defs/themeColor" },

@@ -49,6 +49,17 @@ extension NeoMouse {
             debug("Input Monitoring not granted — system prompt shown; tap install will likely fail this run")
         }
 
+        // Screen Recording: required for the yank pipeline (ScreenCaptureKit).
+        // Prompt up-front so the user grants it once before the first yank,
+        // rather than hitting a cryptic SCStreamError -3801 mid-operation.
+        // Like Accessibility, the grant only takes effect on next launch —
+        // a denied/just-granted state here means yanking will fail this run.
+        if !requestScreenCaptureAccess() {
+            debug(
+                "Screen Recording not granted — system prompt shown; yank/screenshot operations will fail until granted and relaunched"
+            )
+        }
+
         if state.isDisableKeyInput {
             debug("isDisableKeyInput is true - applying CGEvent tap that swallows most regular key events (a-z0-9)")
             NeoMouse.keyEventTap = CGEvent.tapCreate(

@@ -76,51 +76,47 @@ init:
     @cp settings.toml ~/.config/neomouse/settings.toml
     @echo "Installed default settings to ~/.config/neomouse/settings.toml"
 
-# Dry-run the full release pipeline LOCALLY — produces the exact same
-# artifacts `scripts/release.sh` would (release build, ad-hoc-signed
-# `neomouse.app` bundle inside `dist/neomouse-<version>-macos-arm64.tar.gz`
-# plus its `.sha256`), then stops short of anything that touches a remote:
-# no git tag, no `gh release create`, no Homebrew tap update, no flake bump.
+# Dry-run the full release pipeline LOCALLY *and* install the freshly-built
+# bundle to `/Applications/NeoMouseTest.app` so you can test against a real,
+# TCC-stable install. Two phases:
 #
-# Use this to verify a release works end-to-end before cutting it for real.
-# Output lands in `dist/`; the script prints extract + launch instructions
-# at the end. Default version is `v0.0.0-local` so it doesn't collide with
-# real release tags.
+#   1. Same artifacts `scripts/release.sh` would produce: a release build,
+#      ad-hoc-signed `neomouse.app` bundle inside
+#      `dist/neomouse-<version>-macos-arm64.tar.gz` plus its `.sha256`. Stops
+#      short of anything that touches a remote (no git tag, no `gh release
+#      create`, no Homebrew tap update, no flake bump).
 #
-# Usage: `just release-local` (uses v0.0.0-local) or `just release-local v0.0.1-rc1`.
-release-local version="v0.0.0-local":
-    @DRY_RUN=1 scripts/release.sh {{version}}
-
-# Build the local-release tarball, then install it to
-# `/Applications/NeoMouseTest.app` with a rewritten bundle identity so TCC
-# grants (Accessibility, Input Monitoring) survive across rebuilds.
-#
-# Why: extracting the release tarball under `/tmp/` gives each rebuild a
-# fresh binary path, which TCC treats as a new app — grants don't persist
-# and macOS sometimes refuses to add `/tmp/` apps via System Settings →
-# Privacy → Input Monitoring → "+". `/Applications/` is stable, so granting
-# Accessibility + Input Monitoring once carries across every subsequent
-# `just release-test`.
-#
-# Bundle identity is rewritten:
-#   CFBundleIdentifier:  com.kangazero.NeoMouseTest  (≠ production)
-#   CFBundleName / DisplayName: NeoMouseTest         (≠ "NeoMouse")
-# so TCC tracks this separately from a future production NeoMouse install.
-# Re-signs after the plist edit (--deep, ad-hoc) and clears quarantine.
+#   2. Replace `/Applications/NeoMouseTest.app` with the freshly-built bundle,
+#      rewriting bundle identity so TCC tracks the test install separately
+#      from a future production NeoMouse:
+#        CFBundleIdentifier:  com.kangazero.NeoMouseTest  (≠ production)
+#        CFBundleName / DisplayName: NeoMouseTest         (≠ "NeoMouse")
+#      Re-signs after the plist edit (--deep, ad-hoc) and clears quarantine.
+#      `/Applications/` is the only stable path TCC reliably honors — `/tmp/`
+#      and `.build/` paths get a fresh TCC identity each rebuild and macOS
+#      sometimes refuses to add them via System Settings → Privacy → Input
+#      Monitoring → "+". Putting the test bundle in /Applications means
+#      granting Accessibility + Input Monitoring once carries across every
+#      subsequent `just release-local`.
 #
 # After the first launch, grant once:
 #   System Settings → Privacy & Security → Accessibility    → enable NeoMouseTest
 #   System Settings → Privacy & Security → Input Monitoring → enable NeoMouseTest
-# Subsequent runs of this recipe replace the bundle in place; TCC keeps both grants.
-release-test: release-local
+# Subsequent runs replace the bundle in place; TCC keeps both grants.
+#
+# Usage: `just release-local` (uses v0.0.0-local) or `just release-local v0.0.1-rc1`.
+release-local version="v0.0.0-local":
     #!/usr/bin/env bash
     set -euo pipefail
+    # Phase 1 — build the tarball + sha256 into dist/.
+    DRY_RUN=1 scripts/release.sh {{version}}
+    # Phase 2 — install to /Applications/NeoMouseTest.app with rewritten identity.
     # Stop any running NeoMouseTest so we can replace the bundle in /Applications.
     pkill -f "NeoMouseTest.app/Contents/MacOS/neomouse" 2>/dev/null || true
     sleep 0.5
     rm -rf /Applications/NeoMouseTest.app
     STAGE=$(mktemp -d)
-    tar -xzf dist/neomouse-v0.0.0-local-macos-arm64.tar.gz -C "$STAGE"
+    tar -xzf dist/neomouse-{{version}}-macos-arm64.tar.gz -C "$STAGE"
     mv "$STAGE/neomouse.app" /Applications/NeoMouseTest.app
     rm -rf "$STAGE"
     # Rewrite identity in the installed Info.plist. plutil edits invalidate
@@ -135,6 +131,10 @@ release-test: release-local
     echo "First-run TCC: System Settings → Privacy & Security → Accessibility + Input Monitoring → enable NeoMouseTest"
     echo
     open /Applications/NeoMouseTest.app
+
+# Back-compat alias for the old name. `release-test` and `release-local` now
+# do the same thing — kept so existing muscle memory + scripts keep working.
+release-test: release-local
 
 # Lint + test + config schema check — what the pre-commit hook runs
 check: lint test check-config

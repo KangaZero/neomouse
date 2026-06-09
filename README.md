@@ -202,6 +202,9 @@ Other recipes:
 | `just fmt` | `swift format -i` to auto-format in place |
 | `just check-config` | Validate `settings.toml` against `schema/settings.schema.json` (Taplo) |
 | `just check` | `lint + test + check-config` (what the pre-commit hook runs) |
+| `just init` | Install the repo-root `settings.toml` to `~/.config/neomouse/settings.toml` (overwrites — for resetting to defaults) |
+| `just release-local [version]` | Dry-run the full release pipeline locally **and** install the freshly-built bundle to `/Applications/NeoMouseTest.app` for TCC-stable testing. Default version `v0.0.0-local` |
+| `just release-test` | Back-compat alias for `release-local` |
 | `just clean` | `swift package clean` and remove `.build/` |
 
 macOS will prompt for Accessibility permissions the first time you launch from each build path. Allow `neomouse` in **System Settings → Privacy & Security → Accessibility**, then relaunch.
@@ -236,12 +239,22 @@ Sections (full schema in `schema/settings.schema.json`):
 
 - `[grid]` — find-mode overlay: `divisions`, `inner_divisions`, `inset`, the per-cell label alphabets, `is_always_show_inner_characters`.
 - `[motion]` — `rows_on_screen` / `columns_on_screen` (integer or `"automatic"` to derive from screen size; auto keeps cells square), `is_clamp_cursor_to_current_screen`.
-- `[visual]` — `minimum_highlight_width`, `mouse_event_on_visual` (e.g. press-and-hold left/right mouse on visual enter for drag-select).
+- `[visual]` — `minimum_highlight_width`.
 - `[gesture]` — pinch/zoom `zoom_step_value`, scroll `increments_per_gesture`, rotate `degrees_to_rotate`.
 - `[commands]` — whitelisted command-line commands the user can invoke via `:`.
-- `[configuration]` — session/history caps (`max_session_count`, `max_operations_per_session`, `max_jumps_per_session`), `new_session_on_open`, `is_disable_key_input` (swallow plain-key presses when active vs. listen-only).
+- `[configuration]` — `is_disable_key_input` (swallow plain-key presses when active vs. listen-only), `max_session_count`, `new_session_on_open`, `mode_on_start` (`"disabled"` / `"normal"` / `"find"` / `"command"` / `"menu"`), `is_show_key_cast` (vim-showcmd pill), `is_auto_snap` (when `:cursorline` / `:cursorcolumn` is active, `hjkl` snaps the cursor to its grid-cell centre so it lines up with the highlighted band; default `false`).
+- `[theme.*]` — per-element visual overrides for every overlay except the menu-bar icon. Nine sub-sections: `theme.grid` (shared by find-mode grid + cursor-surrounded grid), `theme.numbers_overlay` (incl. gutter `direction` left/right and `column_strip_direction` top/bottom), `theme.command_line`, `theme.marks_menu`, `theme.register_menu`, `theme.help_dialog`, `theme.visual_highlight`, `theme.toast`, `theme.key_cast`. Every field has a default; the deployed `settings.toml` lists each one with its current value as a starting point. Colors are hex strings (`#rrggbb` / `#rrggbbaa`), fonts are inline tables (`{ family, size, weight, design }`), anchors / materials / directions are string enums. Schema rejects unknown keys ("unknown key(s) in [theme.toast]: `backgrond`. Valid keys: …") and unknown enum values ("unknown direction value `leftt`; expected one of: left, right") at decode time, surfaced via a toast.
 
 `just check-config` runs Taplo against `schema/settings.schema.json` so schema drift is caught at commit time, not at startup.
+
+### Customization at runtime
+
+Two complementary paths for tweaking `settings.toml` without restarting:
+
+- **Hot reload.** `SettingsWatcher` watches the resolved `settings.toml` for writes (debounced ~250 ms, atomic-save aware). On every successful re-decode, the new theme republishes into `NeoMouseState.theme` (`@Published`) and every SwiftUI view that reads `state.theme.X` redraws automatically. Decode failures keep the previous theme in place and surface the error via a toast — including the "unknown key" / "unknown value" hints from the strict validator above. Edit `~/.config/neomouse/settings.toml` in any editor; changes land in the live app within the debounce window.
+- **Settings window.** Menu-bar dropdown → **Settings…** (or `⌘,` when neomouse is the focused app) opens an Apple-style preferences window with a sidebar listing a **Behavior** section plus each themable element. Every control is native: `ColorPicker` (with opacity slider in the system color panel) for colors, `Stepper` for numbers, `Picker` for enums, `Toggle` for behavior knobs, free-text + dropdowns for the single shared font family / weight / design. Theme edits apply **live** (no Apply button) by writing into `state.theme` — drag a stepper, the overlay resizes mid-drag. **Save** (`⌘S`) persists the live theme to `~/.config/neomouse/settings.toml` (via `ThemeWriter`, preserving every non-`[theme.*]` section above it byte-for-byte) and the Behavior toggles into `[configuration]` (via `ConfigWriter`, a line-level rewrite). **Reset to Defaults** reverts the live theme and behavior knobs to the built-in values. While Settings is open, neomouse is force-paused (mode → `.disabled`) so the panel doesn't fight live overlays for the cursor; re-enable with `⌘E` after closing — `is_auto_snap` takes effect on the next `hjkl` motion.
+
+A live regression script — `scripts/test-hot-reload.sh` (pass `--launch` to first build + install `/Applications/NeoMouseTest.app`) — drives `~/.config/neomouse/settings.toml` through eight mutation scenarios (valid + invalid + revert) and tails `~/Library/Logs/neomouse/neomouse.log` to confirm the watcher reacted as expected.
 
 ### Dev seed
 
@@ -308,29 +321,36 @@ The env-var + bundle checks are evaluated once at module load, so per-`debug()` 
 ```
 Package.swift                — SwiftPM manifest (1 executable + 4 library targets + test target)
 .swift-version               — pinned toolchain version (read by swiftly)
-settings.toml                — runtime config template (TOML)
+Info.plist                   — bundle metadata embedded into the wrapped .app (LSUIElement=true, com.kangazero.neomouse, etc.)
+settings.toml                — runtime config template (TOML) — also shipped inside the .app bundle for first-launch auto-deploy
 schema/settings.schema.json  — JSON schema enforced by Taplo (`just check-config`)
 justfile                     — developer commands (`just`)
 mise.toml                    — pinned dev tool versions: just, taplo (mise)
 .swift-format                — formatter / linter config
 .githooks/pre-commit         — lint staged Swift + run tests + check-config
-.github/workflows/ci.yml     — CI: lint + build + test on macos-15 (Swift 6.3 via swiftly)
+.github/workflows/ci.yml     — CI: lint + build + test on macos-15 (Swift 6.3 via swiftly) + Taplo schema check
 flake.nix / flake.lock       — Nix flake distribution
-scripts/release.sh           — cut a release (binary + tarball + tag + GitHub Release + brew tap bump + flake bump)
+scripts/release.sh           — cut a release (binary + tarball + tag + GitHub Release + brew tap bump + flake bump). Supports `DRY_RUN=1` for local-only artifact production
 scripts/setup-hooks.sh       — one-time hook activation
+scripts/test-hot-reload.sh   — live regression harness for SettingsWatcher (valid + invalid edits → log assertions; always restores settings.toml via shell trap)
+scripts/release-v0.0.1-prep/ — staging area for the Homebrew formula update that must land alongside v0.0.1 (.app bundle install block — kept out of the tap repo until release time so brew install neomouse against v0.0.0 doesn't break)
 
-Sources/neomouse/            — executable target: app shell, key event tap, modes, overlays, menus
-  NeoMouseApp.swift          — @main entry, NeoMouseState, key/mouse/pasteboard monitors, mode dispatch
+Sources/neomouse/            — executable target: app shell, key event tap, modes, overlays, menus, settings
+  NeoMouseApp.swift          — @main entry, NeoMouseState, key/mouse/pasteboard monitors, mode dispatch, SettingsWatcher wiring
   AppDelegate.swift          — applicationWillTerminate cleanup; .accessory activation policy
-  KeyEventTap.swift          — global CGEventTap install (defaultTap vs. listenOnly); AX permission prompt
+  KeyEventTap.swift          — global CGEventTap install (defaultTap vs. listenOnly); AX + Input Monitoring permission prompts
   CoreOperations.swift       — shared operation implementations (yank, paste, marks, visual, etc.) called from the key handler
+  SettingsWatcher.swift      — DispatchSource file watcher on the resolved settings.toml (debounced 250ms, atomic-save aware → re-decode → republish theme)
   modes/visual.swift         — visual-mode exit + selection-state reset
-  ui/MenuBar.swift           — MenuBarExtra status item (mode-colored icon, dropdown actions, Quit)
+  ui/MenuBar.swift           — MenuBarExtra status item (mode-colored icon, dropdown actions incl. Settings…, Show Debug Log, Quit)
+  ui/SettingsWindow.swift    — NSWindow manager for the preferences panel (force-pauses neomouse on open)
+  ui/SettingsView.swift      — SwiftUI Form-based settings: Shared Font + per-element sections; ColorPicker / Stepper / Picker controls; live preview; Save (→ ThemeWriter) / Reset
+  ui/Theme+SwiftUI.swift     — ThemeColor / ThemeFont / ThemeMaterial / ThemeAnchor → SwiftUI Color / Font / Material / origin(in:panelSize:offsetX:offsetY:) bridges
   ui/CommandLine.swift       — command-line overlay with wildmenu-style fuzzy suggestions
   ui/HelpDialog.swift        — `?`-triggered keybind reference overlay
   ui/KeyCast.swift           — keycast overlay
   ui/GridOverlay.swift       — find-mode labelled grid (outer + inner divisions)
-  ui/NumbersOverlay.swift    — numbers / relativenumbers ruler + cursorline / cursorcolumn
+  ui/NumbersOverlay.swift    — numbers / relativenumbers ruler + cursorline / cursorcolumn (gutter direction left/right, column-strip direction top/bottom)
   ui/CursorSurroundedGridOverlay.swift — specialFind small grid around current cursor position
   ui/VisualHighlightOverlay.swift — visual-mode selection rectangle
   ui/MarksMenu.swift         — marks browser (`menu(window: .marks)`)
@@ -368,6 +388,8 @@ Sources/neomouseDB/          — library: GRDB-backed store
 
 Sources/neomouseConfig/      — library: TOMLDecoder → Config; LoadError; resolution paths
   config.swift               — Config struct, loadConfig, defaults
+  theme.swift                — `Config.Theme` + 9 element sub-themes (GridTheme, NumbersOverlayTheme, …); shared primitives ThemeColor / ThemeFont / ThemeAnchor / ThemeDirection / ThemeVerticalDirection / ThemeMaterial
+  strictDecoding.swift       — `validateKnownKeys` (rejects typoed TOML keys with friendly "Valid keys: …" message) + `decodeFriendlyEnum` (rejects typoed enum raw values with "expected one of: …") + `AnyCodingKey` permissive key helper
   keymap.swift               — (WIP, currently fully commented) configurable keymap parser
 
 Sources/neomouseTypes/       — library: shared value types (kept import-light to avoid cycles)
@@ -378,6 +400,7 @@ Tests/neomouseTests/         — swift-testing (`import Testing`) suites
   MotionTargetsTests.swift   — cell-center coord math
   ScreenTests.swift          — 5x5 grid suite for adjacentDisplayRectByDirection
   PendingOpReducerTests.swift — normal-mode pending-operation state machine
+  KeyCodeMapTests.swift      — asciiChar contract + charToKeyCodeMap invariants + non-Latin layout fallback
 ```
 
 Both `Sources/neomouse/old/` and `Sources/neomouseUtils/old/` hold superseded experiments (undotree, operation, findModeKeys, getTwoLetterPermutations) — not on the active code path; kept for reference until reimplementation lands.

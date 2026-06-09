@@ -1,5 +1,49 @@
+import AppKit
 import ScreenCaptureKit
 import CoreGraphics
+
+/// Trigger the macOS Screen Recording TCC prompt if undecided, or return
+/// the current grant state otherwise. Call at launch so the user sees the
+/// system dialog before they ever try to yank — without this they'd hit a
+/// cryptic SCStreamError -3801 ("The user declined TCCs...") only on the
+/// first screenshot, with no obvious path to recovery.
+///
+/// Returns `true` when access is granted, `false` when denied or still
+/// pending the user's decision. The system shows the prompt at most once
+/// per (bundle, decision-state); subsequent calls when denied just return
+/// false without nagging.
+public func requestScreenCaptureAccess() -> Bool {
+    CGRequestScreenCaptureAccess()
+}
+
+/// Detect the specific ScreenCaptureKit error code that means
+/// "Screen Recording permission is missing." Used by CoreOperations.normalYank
+/// to surface an actionable toast ("enable in System Settings") instead of
+/// the raw error message.
+///
+/// SCStreamError codes are defined in <ScreenCaptureKit/SCError.h>; -3801
+/// is `SCStreamErrorUserDeclined`.
+public func isScreenCaptureTCCError(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    return nsError.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain"
+        && nsError.code == -3801
+}
+
+/// Open System Settings directly to the Screen Recording pane. Best-effort:
+/// the URL scheme has been stable across macOS 13–15 but isn't formally
+/// documented. Falls back to opening the general Privacy pane if the
+/// specific anchor doesn't resolve.
+public func openScreenRecordingSettings() {
+    let urls = [
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "x-apple.systempreferences:com.apple.preference.security?Privacy",
+    ]
+    for str in urls {
+        if let url = URL(string: str), NSWorkspace.shared.open(url) {
+            return
+        }
+    }
+}
 
 public func screenshot(rect: CGRect, excluding ids: [CGWindowID] = []) async throws
     -> CGImage?
