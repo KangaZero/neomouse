@@ -89,6 +89,11 @@ final class NumbersOverlay {
         CGFloat(appState?.theme.numbersOverlay.columnStripHeight ?? 20)
     }
 
+    /// True when at least one cursor band (`:cursorline` / `:cursorcolumn`)
+    /// is currently active. Used by the auto-snap path to decide whether a
+    /// keyboard motion should snap the cursor to its cell centre.
+    var hasActiveCursorBand: Bool { !model.options.isEmpty }
+
     func passAppState(state: NeoMouseState) {
         appState = state
         model.theme = state.theme.numbersOverlay

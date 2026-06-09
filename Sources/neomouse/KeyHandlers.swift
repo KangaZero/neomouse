@@ -1101,6 +1101,10 @@ extension NeoMouse {
             Mouse.moveRelative(
                 x: delta.dx, y: delta.dy, clampToScreen: true
             )
+            // When :cursorline/:cursorcolumn is up and is_auto_snap is on,
+            // pull the cursor to the centre of its cell so it lines up with
+            // the highlighted band. No-op otherwise.
+            NeoMouse.autoSnapToCursorBandIfNeeded(appState: appState)
             appState.mode = .normal(
                 currentPendingOperation: .none,
                 operationCountAsString: nil

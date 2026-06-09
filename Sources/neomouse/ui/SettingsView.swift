@@ -368,12 +368,87 @@ enum ThemeWriter {
     }
 }
 
+// MARK: - TOML writer for [configuration] knobs
+
+/// Persists non-theme `[configuration]` toggles back into settings.toml.
+/// `ThemeWriter` only rewrites the `[theme.*]` block (everything above the
+/// first `[theme.` header is preserved byte-for-byte), so a behavior knob like
+/// `is_auto_snap` — which lives in `[configuration]`, *above* the theme block
+/// — needs its own line-level rewrite. Runs *before* `ThemeWriter.persist`
+/// at the Save call site so the theme writer re-reads the already-updated file
+/// and preserves the change.
+@MainActor
+enum ConfigWriter {
+    /// Persist `[configuration].is_auto_snap`. Returns nil on success or a
+    /// short error string for surfacing in a toast / the Settings action bar.
+    static func persistAutoSnap(_ value: Bool) -> String? {
+        guard let url = Config.resolvedURL else {
+            return "no settings.toml found at any resolved path"
+        }
+        let existing: String
+        do {
+            existing = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            return "read failed: \(error.localizedDescription)"
+        }
+        let updated = setBool("is_auto_snap", value: value, section: "configuration", in: existing)
+        do {
+            try updated.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            return "write failed: \(error.localizedDescription)"
+        }
+        return nil
+    }
+
+    /// Rewrite (or insert) a `key = true/false` line. Three cases, in order:
+    ///   1. Key already present → replace just its value, in place.
+    ///   2. `[section]` header present but key absent → insert the line right
+    ///      after the header.
+    ///   3. Neither → splice a fresh `[section]` block in before the first
+    ///      `[theme.*]` header (or append at EOF if there's no theme block).
+    private static func setBool(
+        _ key: String, value: Bool, section: String, in text: String
+    ) -> String {
+        let literal = value ? "true" : "false"
+
+        // 1. Replace an existing `key = true|false` value in place.
+        let keyPattern = "(?m)^(\\s*\(key)\\s*=\\s*)(?:true|false)\\b"
+        if let range = text.range(of: keyPattern, options: .regularExpression) {
+            return text.replacingOccurrences(
+                of: keyPattern, with: "$1\(literal)",
+                options: .regularExpression, range: range
+            )
+        }
+
+        // 2. Insert under an existing section header.
+        let sectionPattern = "(?m)^\\[\(section)\\][ \\t]*$"
+        if let range = text.range(of: sectionPattern, options: .regularExpression) {
+            var result = text
+            result.insert(contentsOf: "\n\(key) = \(literal)", at: range.upperBound)
+            return result
+        }
+
+        // 3. No section at all — splice one in before the theme block.
+        let block = "[\(section)]\n\(key) = \(literal)\n\n"
+        if let themeRange = text.range(
+            of: "(?m)^\\[theme(\\.|\\])", options: .regularExpression
+        ) {
+            var result = text
+            result.insert(contentsOf: block, at: themeRange.lowerBound)
+            return result
+        }
+        let prefix = text.hasSuffix("\n") ? text : text + "\n"
+        return prefix + "\n" + block
+    }
+}
+
 // MARK: - SettingsView
 
 /// Sections shown in the sidebar — order matches what's most-asked. "Shared
 /// Font" sits at the top because changing the typeface is the single most
 /// impactful theme tweak (it propagates to every overlay).
 private enum SettingsSection: String, CaseIterable, Identifiable {
+    case behavior = "Behavior"
     case sharedFont = "Shared Font"
     case toast = "Toast"
     case keyCast = "Key Cast"
@@ -389,6 +464,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .behavior: return "slider.horizontal.3"
         case .sharedFont: return "textformat"
         case .toast: return "bell.fill"
         case .keyCast: return "keyboard"
@@ -419,6 +495,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 Form {
                     switch selection {
+                    case .behavior: BehaviorForm(state: state)
                     case .sharedFont: SharedFontForm(state: state)
                     case .toast: ToastForm(state: state)
                     case .keyCast: KeyCastForm(state: state)
@@ -449,14 +526,24 @@ struct SettingsView: View {
             Spacer()
             Button("Reset to Defaults") {
                 state.theme = Config.Theme()
+                state.isAutoSnap = Config.Configuration.defaultIsAutoSnap
                 saveResult = nil
             }
             Button("Save to settings.toml") {
-                if let error = ThemeWriter.persist(state.theme) {
-                    saveResult = "Save failed: \(error)"
-                } else {
-                    saveResult = "Saved to ~/.config/neomouse/settings.toml"
+                // Config knobs first: ThemeWriter re-reads the file and
+                // preserves everything above the [theme.*] block byte-for-byte,
+                // so the is_auto_snap change must already be on disk by then.
+                var errors: [String] = []
+                if let error = ConfigWriter.persistAutoSnap(state.isAutoSnap) {
+                    errors.append(error)
                 }
+                if let error = ThemeWriter.persist(state.theme) {
+                    errors.append(error)
+                }
+                saveResult =
+                    errors.isEmpty
+                    ? "Saved to ~/.config/neomouse/settings.toml"
+                    : "Save failed: \(errors.joined(separator: "; "))"
             }
             .keyboardShortcut("s", modifiers: .command)
             .buttonStyle(.borderedProminent)
@@ -544,6 +631,30 @@ private struct FontEditor: View {
 // top, colors next, fonts at the bottom. Color pickers use SwiftUI's
 // `ColorPicker(supportsOpacity: true)` so users can drag the alpha slider
 // in the system color panel — which is what makes the muted overlays work.
+
+/// Non-theme behavior knobs from `[configuration]`. Persisted via
+/// `ConfigWriter` (not `ThemeWriter`) on Save. Unlike the theme forms, these
+/// take effect the next time NeoMouse is active — the Settings window
+/// force-pauses NeoMouse while open, so there's nothing live to preview here.
+private struct BehaviorForm: View {
+    @ObservedObject var state: NeoMouseState
+
+    var body: some View {
+        Section("Cursor") {
+            Toggle("Auto-snap to cursor band", isOn: $state.isAutoSnap)
+            Text(
+                """
+                When :cursorline / :cursorcolumn is active, hjkl motions snap \
+                the cursor to the centre of its grid cell so it always lines up \
+                with the highlighted band. No effect when no band is showing.
+                """
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
 
 /// Single point of control for the typeface used everywhere in neomouse.
 /// Changing family / weight / design here broadcasts to every `ThemeFont`

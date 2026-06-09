@@ -68,6 +68,14 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     /// shown regardless of what's pending; when true, KeyCast.update() decides
     /// per-state whether to surface it.
     let isShowKeyCast: Bool
+    /// When true, hjkl motions snap the cursor to its grid-cell centre while
+    /// `:cursorline` / `:cursorcolumn` is active so it aligns with the
+    /// highlighted band. See `NeoMouse.autoSnapToCursorBandIfNeeded`.
+    ///
+    /// `@Published var` (not `let`) because the Settings window toggles it
+    /// live and `SettingsWatcher` hot-reloads it from settings.toml — see
+    /// `reload(from:)` and `SettingsView`'s Behavior section.
+    @Published var isAutoSnap: Bool
     //TODO add the rest
 
     // User-overridable visual theme for every overlay / menu / toast.
@@ -111,6 +119,8 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
             config?.configuration.modeOnStart ?? Config.Configuration.defaultModeOnStart
         self.isShowKeyCast =
             config?.configuration.isShowKeyCast ?? Config.Configuration.defaultIsShowKeyCast
+        self.isAutoSnap =
+            config?.configuration.isAutoSnap ?? Config.Configuration.defaultIsAutoSnap
         self.theme = config?.theme ?? Config.Theme()
 
         mode = {
@@ -141,7 +151,9 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     /// SwiftUI views that read `state.theme.X` inside `body` redraw
     /// automatically because `theme` is `@Published`. Panels that captured
     /// theme at panel-creation time (CommandLine, MarksMenu, RegisterMenu,
-    /// HelpDialog) pick up changes on next show — close-and-reopen.
+    /// HelpDialog) pick up changes on next show — close-and-reopen. Also
+    /// `[configuration].is_auto_snap` — a cheap behavior toggle read fresh on
+    /// every hjkl motion, so a re-decode picks it up with no further wiring.
     ///
     /// Not reloadable (require restart, with no toast nag because users
     /// rarely change them): `is_disable_key_input` (CGEventTap mode swap is
@@ -150,6 +162,7 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     /// (wildmenu cache would need a rebuild).
     func reload(from config: Config) {
         theme = config.theme ?? Config.Theme()
+        isAutoSnap = config.configuration.isAutoSnap
     }
 
     // MARK: - Visual selection helpers
@@ -683,6 +696,20 @@ struct NeoMouse: App {
             NSEvent.removeMonitor(monitor)
             mouseMonitor = nil
         }
+    }
+
+    /// Auto-snap: when `is_auto_snap` is enabled and a cursor band
+    /// (`:cursorline` / `:cursorcolumn`) is currently showing, warp the cursor
+    /// to the centre of the grid cell it sits in so it lines up exactly with
+    /// the highlighted band. Reuses `NumbersOverlay.snapCursor()` — the same
+    /// path the manual `s` keybind uses — which recomputes the cell index from
+    /// the live cursor position first, so it's safe to call right after a
+    /// motion has warped the cursor. No-op when auto-snap is off or no band is
+    /// active.
+    @MainActor
+    static func autoSnapToCursorBandIfNeeded(appState: NeoMouseState) {
+        guard appState.isAutoSnap, NumbersOverlay.shared.hasActiveCursorBand else { return }
+        NumbersOverlay.shared.snapCursor()
     }
 
     static func enterNormalMode(appState: NeoMouseState) {

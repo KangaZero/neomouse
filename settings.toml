@@ -76,6 +76,10 @@ mode_on_start = "normal"
 # pressing g, "5" after typing 5, "5gg" mid-sequence). Hidden when no
 # operation is pending.
 is_show_key_cast = true
+# When true, hjkl cursor motions snap the cursor to the centre of its grid
+# cell while :cursorline / :cursorcolumn is active, so the cursor always lines
+# up with the highlighted band. No effect when no band is showing.
+is_auto_snap = false
 
 # ---------------------------------------------------------------------------
 # [theme.*] — per-element visual overrides
