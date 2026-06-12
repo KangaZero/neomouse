@@ -65,7 +65,9 @@ available = [
 # Esc / Tab / arrows / F-keys still flow to the focused app. When false, the
 # tap is .listenOnly — every key passes through, neomouse just observes.
 is_disable_key_input = true
-front_app_follows_mouse= false
+# When true, the frontmost (highest z-order) app under the cursor is
+# automatically made the active application (focus-follows-mouse).
+front_app_follows_mouse = false
 max_session_count = 10
 # Open a fresh session on launch instead of resuming the most recent one.
 new_session_on_open = true

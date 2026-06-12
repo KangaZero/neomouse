@@ -63,7 +63,6 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
 
     // Configuration settings
     let isDisableKeyInput: Bool
-    let frontAppFollowsMouse: Bool
     let modeOnStart: NeomouseType.ConfigMode
     /// Gates the vim-showcmd KeyCast overlay. When false, the panel is never
     /// shown regardless of what's pending; when true, KeyCast.update() decides
@@ -77,6 +76,8 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     /// live and `SettingsWatcher` hot-reloads it from settings.toml — see
     /// `reload(from:)` and `SettingsView`'s Behavior section.
     @Published var isAutoSnap: Bool
+
+    @Published var frontAppFollowsMouse: Bool
     //TODO add the rest
 
     // User-overridable visual theme for every overlay / menu / toast.
@@ -117,7 +118,7 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
         self.isDisableKeyInput =
             config?.configuration.isDisableKeyInput ?? Config.Configuration.defaultIsDisableKeyInput
         self.frontAppFollowsMouse =
-            config?.configuration.frontAppFollowsMouse ?? Config.Configuration.defaultIsDisableKeyInput
+            config?.configuration.frontAppFollowsMouse ?? Config.Configuration.defaultFrontAppFollowsMouse
         self.modeOnStart =
             config?.configuration.modeOnStart ?? Config.Configuration.defaultModeOnStart
         self.isShowKeyCast =
@@ -166,6 +167,7 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     func reload(from config: Config) {
         theme = config.theme ?? Config.Theme()
         isAutoSnap = config.configuration.isAutoSnap
+        frontAppFollowsMouse = config.configuration.frontAppFollowsMouse
     }
 
     // MARK: - Visual selection helpers
@@ -684,10 +686,6 @@ struct NeoMouse: App {
                 guard appState.isVisual, let loc = Mouse.location() else { return }
                 appState.endCGXPoint = loc.x
                 appState.endCGYPoint = loc.y
-                if let (currentApp, currentAppCGRect) = Mouse.appUnderRect() {
-                    debug("App: \(currentApp.localizedName ?? "unknown")")
-                    debug("currentAppCGRect: \(currentAppCGRect)")
-                }
             }
         }
     }

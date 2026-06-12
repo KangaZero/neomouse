@@ -381,7 +381,7 @@ enum ThemeWriter {
 enum ConfigWriter {
     /// Persist `[configuration].is_auto_snap`. Returns nil on success or a
     /// short error string for surfacing in a toast / the Settings action bar.
-    static func persistAutoSnap(_ value: Bool) -> String? {
+    static func persistConfiguration(_ value: Bool, _ keyInSnakeCase: String) -> String? {
         guard let url = Config.resolvedURL else {
             return "no settings.toml found at any resolved path"
         }
@@ -391,11 +391,11 @@ enum ConfigWriter {
         } catch {
             return "read failed: \(error.localizedDescription)"
         }
-        let updated = setBool("is_auto_snap", value: value, section: "configuration", in: existing)
+        let updated = setBool(keyInSnakeCase, value: value, section: "configuration", in: existing)
         do {
             try updated.write(to: url, atomically: true, encoding: .utf8)
         } catch {
-            return "write failed: \(error.localizedDescription)"
+            return "write failed for \(keyInSnakeCase): \(error.localizedDescription)"
         }
         return nil
     }
@@ -527,6 +527,7 @@ struct SettingsView: View {
             Button("Reset to Defaults") {
                 state.theme = Config.Theme()
                 state.isAutoSnap = Config.Configuration.defaultIsAutoSnap
+                state.frontAppFollowsMouse = Config.Configuration.defaultFrontAppFollowsMouse
                 saveResult = nil
             }
             Button("Save to settings.toml") {
@@ -534,7 +535,11 @@ struct SettingsView: View {
                 // preserves everything above the [theme.*] block byte-for-byte,
                 // so the is_auto_snap change must already be on disk by then.
                 var errors: [String] = []
-                if let error = ConfigWriter.persistAutoSnap(state.isAutoSnap) {
+                if let error = ConfigWriter.persistConfiguration(state.isAutoSnap, "is_auto_snap") {
+                    errors.append(error)
+                }
+                if let error = ConfigWriter.persistConfiguration(state.frontAppFollowsMouse, "front_app_follows_mouse")
+                {
                     errors.append(error)
                 }
                 if let error = ThemeWriter.persist(state.theme) {
@@ -652,6 +657,17 @@ private struct BehaviorForm: View {
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+            Toggle("Most front app on cursor set as current active app", isOn: $state.frontAppFollowsMouse)
+            Text(
+                """
+                When active, the most front app (e.g. highest z-index) the cursor is on \
+                becomes the current active application.
+                """
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
         }
     }
 }

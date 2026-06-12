@@ -139,7 +139,7 @@ public struct Config: Decodable, Sendable {
         public let isAutoSnap: Bool
 
         public static let defaultIsDisableKeyInput: Bool = true
-        public static let frontAppFollowsMouse: Bool = true
+        public static let defaultFrontAppFollowsMouse: Bool = false
         public static let defaultMaxSessionCount: UInt = 10
         public static let defaultNewSessionOnOpen: Bool = false
         public static let defaultModeOnStart: NeomouseType.ConfigMode = .normal
@@ -169,7 +169,7 @@ public struct Config: Decodable, Sendable {
                 ?? Self.defaultIsDisableKeyInput
             self.frontAppFollowsMouse =
                 try c.decodeIfPresent(Bool.self, forKey: .frontAppFollowsMouse)
-                ?? Self.defaultIsDisableKeyInput
+                ?? Self.defaultFrontAppFollowsMouse
             self.maxSessionCount =
                 try c.decodeIfPresent(UInt.self, forKey: .maxSessionCount)
                 ?? Self.defaultMaxSessionCount

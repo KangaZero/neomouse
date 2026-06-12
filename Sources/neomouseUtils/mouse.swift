@@ -175,73 +175,73 @@ public enum Mouse {
 
     // MARK: - Hit-testing
 
-    public static func appUnder() -> NSRunningApplication? {
-        guard let mouseLocation = CGEvent(source: nil)?.location else { return nil }
+    /// The app owning the **topmost** on-screen window under the cursor.
+    ///
+    /// Uses the window-server list (`CGWindowListCopyWindowInfo`) rather than
+    /// per-app Accessibility queries. Two reasons this is the right primitive
+    /// for focus-follows-mouse:
+    ///   * **Z-order correct.** The list is returned front-to-back, so the
+    ///     first match is the window actually visible under the point — AX
+    ///     iteration over `runningApplications` is in arbitrary order and can
+    ///     return a window *behind* the one you see.
+    ///   * **Cheap.** One window-server call instead of N synchronous AX IPC
+    ///     round-trips, so it's safe to poll continuously.
+    ///
+    /// Only window bounds / owner PID / layer / alpha are read — none of which
+    /// require Screen Recording permission (only window *titles* are gated).
+    /// `kCGWindowBounds` is CG global, top-left origin — same space as
+    /// `CGEvent.location`, so no Y-flip.
+    public static func frontmostAppUnder() -> NSRunningApplication? {
+        guard let mouse = location() else { return nil }
+        // Exclude our own overlay windows (GridOverlay / NumbersOverlay / …),
+        // which float above everything and would otherwise "win" the hit-test.
+        let myPID = ProcessInfo.processInfo.processIdentifier
 
-        return NSWorkspace.shared.runningApplications.first { app in
-            let axApp = AXUIElementCreateApplication(app.processIdentifier)
-            var windowsRef: CFTypeRef?
+        guard
+            let windowList = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+            ) as? [[String: Any]]
+        else { return nil }
+
+        for info in windowList {  // already front-to-back
             guard
-                AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-                    == .success,
-                let windows = windowsRef as? [AXUIElement]
-            else { return false }
-
-            return windows.contains { window in
-                var posRef: CFTypeRef?
-                var sizeRef: CFTypeRef?
-                guard
-                    AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &posRef)
-                        == .success,
-                    AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeRef)
-                        == .success,
-                    let pv = posRef, let sv = sizeRef
-                else { return false }
-
-                var pos = CGPoint.zero
-                var size = CGSize.zero
-                AXValueGetValue(pv as! AXValue, .cgPoint, &pos)
-                AXValueGetValue(sv as! AXValue, .cgSize, &size)
-
-                // AX API returns CG coords (top-left origin), same as CGEvent.location — no flip needed
-                return CGRect(x: pos.x, y: pos.y, width: size.width, height: size.height)
-                    .contains(mouseLocation)
-            }
-        }
-    }
-    public static func appUnderRect() -> (app: NSRunningApplication, rect: CGRect)? {
-        guard let mouseLocation = CGEvent(source: nil)?.location else { return nil }
-
-        for app in NSWorkspace.shared.runningApplications {
-            let axApp = AXUIElementCreateApplication(app.processIdentifier)
-            var windowsRef: CFTypeRef?
-            guard
-                AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-                let windows = windowsRef as? [AXUIElement]
+                let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                let pidValue = info[kCGWindowOwnerPID as String] as? Int,
+                pid_t(pidValue) != myPID,
+                let alpha = info[kCGWindowAlpha as String] as? Double, alpha > 0,
+                let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+                let bounds = CGRect(dictionaryRepresentation: boundsDict)
             else { continue }
 
-            for window in windows {
-                var posRef: CFTypeRef?
-                var sizeRef: CFTypeRef?
-                guard
-                    AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &posRef) == .success,
-                    AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeRef) == .success,
-                    let pv = posRef, let sv = sizeRef
-                else { continue }
-
-                var pos = CGPoint.zero
-                var size = CGSize.zero
-                AXValueGetValue(pv as! AXValue, .cgPoint, &pos)
-                AXValueGetValue(sv as! AXValue, .cgSize, &size)
-
-                let rect = CGRect(x: pos.x, y: pos.y, width: size.width, height: size.height)
-                if rect.contains(mouseLocation) {
-                    return (app, rect)
-                }
+            if bounds.contains(mouse) {
+                return NSRunningApplication(processIdentifier: pid_t(pidValue))
             }
         }
         return nil
-    }  // MARK: - Click
+    }
+
+    /// Make `app` the active (frontmost) application, if a switch is actually
+    /// warranted. Returns `true` if an activation was issued, `false` if skipped.
+    ///
+    /// The guards are the whole point: calling `activate()` on every tick of a
+    /// focus-follows-mouse loop causes focus flicker and fights the user, so we
+    /// no-op unless `app` is an ordinary, not-already-frontmost, not-us app.
+    @discardableResult
+    public static func setActiveApp(_ app: NSRunningApplication) -> Bool {
+        // Ordinary Dock-visible apps only. Skips menu-bar agents, background /
+        // accessory processes (incl. neomouse itself — an LSUIElement app), and
+        // prohibited apps, none of which should ever be force-focused.
+        guard app.activationPolicy == .regular else { return false }
+        // Never yank focus onto ourselves.
+        guard app.processIdentifier != NSRunningApplication.current.processIdentifier else { return false }
+        // Already frontmost → nothing to do.
+        guard !app.isActive else { return false }
+
+        // macOS 14+ (package min). Brings the app forward and raises its windows.
+        return app.activate()
+    }
+
+    // MARK: - Click
 
     public static func click(_ button: Button, at point: CGPoint) {
         // Warp first so the cursor is at `point` regardless of Zoom remap on

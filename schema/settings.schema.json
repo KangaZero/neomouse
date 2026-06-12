@@ -226,7 +226,6 @@
 			"additionalProperties": false,
 			"required": [
 				"is_disable_key_input",
-				"front_app_follows_mouse",
 				"max_session_count",
 				"new_session_on_open",
 				"mode_on_start"
@@ -239,8 +238,8 @@
 				},
 				"front_app_follows_mouse": {
 					"type": "boolean",
-					"default": true,
-					"description": "If true, the most front app on the current cursor location will automatically be set as the current active app"
+					"default": false,
+					"description": "If true, the frontmost (highest z-order) app under the cursor is automatically made the active application (focus-follows-mouse)."
 				},
 				"max_session_count": {
 					"type": "integer",
