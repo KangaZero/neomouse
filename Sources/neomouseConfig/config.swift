@@ -124,6 +124,7 @@ public struct Config: Decodable, Sendable {
 
     public struct Configuration: Decodable, Sendable {
         public let isDisableKeyInput: Bool
+        public let frontAppFollowsMouse: Bool
         public let maxSessionCount: UInt
         public let newSessionOnOpen: Bool
         public let modeOnStart: NeomouseType.ConfigMode
@@ -138,6 +139,7 @@ public struct Config: Decodable, Sendable {
         public let isAutoSnap: Bool
 
         public static let defaultIsDisableKeyInput: Bool = true
+        public static let frontAppFollowsMouse: Bool = true
         public static let defaultMaxSessionCount: UInt = 10
         public static let defaultNewSessionOnOpen: Bool = false
         public static let defaultModeOnStart: NeomouseType.ConfigMode = .normal
@@ -149,6 +151,7 @@ public struct Config: Decodable, Sendable {
         // unknown-key validation still fires for typos.
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case isDisableKeyInput
+            case frontAppFollowsMouse
             case maxSessionCount
             case newSessionOnOpen
             case modeOnStart
@@ -163,6 +166,9 @@ public struct Config: Decodable, Sendable {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.isDisableKeyInput =
                 try c.decodeIfPresent(Bool.self, forKey: .isDisableKeyInput)
+                ?? Self.defaultIsDisableKeyInput
+            self.frontAppFollowsMouse =
+                try c.decodeIfPresent(Bool.self, forKey: .frontAppFollowsMouse)
                 ?? Self.defaultIsDisableKeyInput
             self.maxSessionCount =
                 try c.decodeIfPresent(UInt.self, forKey: .maxSessionCount)

@@ -80,9 +80,9 @@ init:
 # bundle to `/Applications/NeoMouseTest.app` so you can test against a real,
 # TCC-stable install. Two phases:
 #
-#   1. Same artifacts `scripts/release.sh` would produce: a release build,
-#      ad-hoc-signed `neomouse.app` bundle inside
-#      `dist/neomouse-<version>-macos-arm64.tar.gz` plus its `.sha256`. Stops
+#   1. Same artifacts `scripts/release.sh` would produce: a universal
+#      (arm64 + x86_64) release build, ad-hoc-signed `neomouse.app` bundle inside
+#      `dist/neomouse-<version>-macos-universal.tar.gz` plus its `.sha256`. Stops
 #      short of anything that touches a remote (no git tag, no `gh release
 #      create`, no Homebrew tap update, no flake bump).
 #
@@ -116,7 +116,7 @@ release-local version="v0.0.0-local":
     sleep 0.5
     rm -rf /Applications/NeoMouseTest.app
     STAGE=$(mktemp -d)
-    tar -xzf dist/neomouse-{{version}}-macos-arm64.tar.gz -C "$STAGE"
+    tar -xzf dist/neomouse-{{version}}-macos-universal.tar.gz -C "$STAGE"
     mv "$STAGE/neomouse.app" /Applications/NeoMouseTest.app
     rm -rf "$STAGE"
     # Rewrite identity in the installed Info.plist. plutil edits invalidate

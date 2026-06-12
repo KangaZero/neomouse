@@ -1,0 +1,95 @@
+name: Release
+
+# Cut a release by pushing a `v*` tag (e.g. `git tag v0.1.0 && git push origin
+# v0.1.0`). This workflow then runs the same `scripts/release.sh` you'd run
+# locally — build the UNIVERSAL (arm64 + x86_64) binary, sign, package, publish
+# the GitHub Release, and bump the in-repo flake.nix + the Homebrew tap — except
+# it does NOT re-create the tag (SKIP_TAG=1), since the tag is what triggered it.
+#
+# Required repo secret:
+#   HOMEBREW_TAP_TOKEN — a fine-grained PAT with contents:write on
+#                        KangaZero/homebrew-neomouse (a *separate* repo, so the
+#                        built-in GITHUB_TOKEN can't push there). If unset, the
+#                        Homebrew bump is skipped and you bump the tap manually.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write # publish the Release + push the flake.nix bump to main
+
+jobs:
+  release:
+    name: Build, sign & publish universal release
+    runs-on: macos-15 # full Xcode → x86_64 SDK slice available for --arch
+    steps:
+      # Check out `main` (not the detached tag) so the flake.nix bump can be
+      # committed + pushed to main. The tag points at main's tip, so the build
+      # content is identical. fetch-depth 0 brings tags so SKIP_TAG's existence
+      # check (`git rev-parse $VERSION`) and the release-notes range resolve.
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG"
+
+      - name: Use full Xcode (provides both SDK slices for --arch)
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcode-select -p
+          xcrun --show-sdk-path
+
+      - name: Install Swift 6.3 via swiftly
+        run: |
+          curl -fsSL -o /tmp/swiftly.pkg https://download.swift.org/swiftly/darwin/swiftly.pkg
+          installer -pkg /tmp/swiftly.pkg -target CurrentUserHomeDirectory
+          ~/.swiftly/bin/swiftly init --assume-yes --quiet-shell-followup --skip-install
+          echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
+          ~/.swiftly/bin/swiftly install --use 6.3
+
+      - name: Install Nix (for the flake.nix SRI-hash bump)
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Configure git identity (for flake + tap commits)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run release pipeline
+        env:
+          # gh CLI authenticates off GH_TOKEN; this scope can publish a Release
+          # and push the flake.nix bump to main in *this* repo.
+          GH_TOKEN: ${{ github.token }}
+          # Push token for the *separate* Homebrew tap repo (may be empty).
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          # No tap token configured → skip the Homebrew bump rather than fail
+          # the whole release at the tap clone.
+          if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set — skipping Homebrew tap bump"
+            export SKIP_HOMEBREW=1
+          fi
+          SKIP_TAG=1 scripts/release.sh "${{ steps.tag.outputs.tag }}"
+
+      # Post-publish: now that the universal tarball is live and flake.nix points
+      # at it, prove the flake actually builds against the real asset. (This is
+      # the network-fetching step we keep out of PR CI to avoid a bootstrap 404.)
+      - name: Verify flake builds against the published release
+        run: |
+          git pull --ff-only origin main   # pick up the flake.nix bump just pushed
+          nix build .#default --print-build-logs
+          ls -l result/bin/neomouse

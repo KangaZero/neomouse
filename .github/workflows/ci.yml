@@ -10,16 +10,18 @@ permissions:
   contents: read
 
 jobs:
-  build-test:
-    name: Build & test
+  # ------------------------------------------------------------------
+  # Lint + config-schema checks. Architecture-independent, so run once.
+  # ------------------------------------------------------------------
+  lint:
+    name: Lint & config schema
     runs-on: macos-15
-
     steps:
       - uses: actions/checkout@v5
 
-      # macos-15's preinstalled Xcode ships Swift 6.2.x. Package.swift declares
-      # swift-tools-version 6.3, so we install Swift 6.3 via swiftly (Apple's
-      # official Swift version manager: https://www.swift.org/install/macos/swiftly/).
+      # macos runners' preinstalled Xcode ships Swift 6.2.x. Package.swift
+      # declares swift-tools-version 6.3, so install Swift 6.3 via swiftly
+      # (Apple's official version manager: https://www.swift.org/install/macos/swiftly/).
       - name: Install Swift 6.3 via swiftly
         run: |
           curl -fsSL -o /tmp/swiftly.pkg https://download.swift.org/swiftly/darwin/swiftly.pkg
@@ -43,8 +45,87 @@ jobs:
       - name: Check settings.toml against schema
         run: taplo check settings.toml
 
+  # ------------------------------------------------------------------
+  # Build + test on BOTH Mac architectures:
+  #   macos-15 → Apple Silicon (arm64)
+  #   macos-13 → Intel        (x86_64)
+  # The arm64 runner also smoke-tests the universal release build so the
+  # release path is exercised on every PR.
+  # ------------------------------------------------------------------
+  build-test:
+    name: Build & test (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-13
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Swift 6.3 via swiftly
+        run: |
+          curl -fsSL -o /tmp/swiftly.pkg https://download.swift.org/swiftly/darwin/swiftly.pkg
+          installer -pkg /tmp/swiftly.pkg -target CurrentUserHomeDirectory
+          ~/.swiftly/bin/swiftly init --assume-yes --quiet-shell-followup --skip-install
+          echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
+          ~/.swiftly/bin/swiftly install --use 6.3
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          uname -m
+          swift --version
+
       - name: Build (debug)
         run: swift build
 
       - name: Test
         run: swift test
+
+      # Exercise the release build path on the arm64 runner: produce the same
+      # universal Mach-O `scripts/release.sh` ships and assert both slices are
+      # present, so a broken `--arch` build is caught in PR CI, not at release.
+      - name: Universal release build smoke test
+        if: matrix.arch == 'arm64'
+        run: |
+          swift build -c release --arch arm64 --arch x86_64
+          BIN=.build/release/neomouse
+          file "$BIN"
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "slices: $ARCHS"
+          [[ "$ARCHS" == *arm64* ]]  || { echo "::error::missing arm64 slice"; exit 1; }
+          [[ "$ARCHS" == *x86_64* ]] || { echo "::error::missing x86_64 slice"; exit 1; }
+
+  # ------------------------------------------------------------------
+  # Validate the Nix flake on both architectures. `nix flake check
+  # --all-systems` *evaluates* the package derivation for every declared
+  # system (aarch64-darwin + x86_64-darwin) — pure eval, so it doesn't need
+  # the release tarball to exist. The full `nix build` (which fetches the
+  # asset) runs post-publish inside release.yml instead.
+  # ------------------------------------------------------------------
+  flake:
+    name: Flake check (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-13
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: flake show
+        run: nix flake show
+
+      - name: flake check (all systems)
+        run: nix flake check --all-systems
