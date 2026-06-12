@@ -25,7 +25,7 @@ Tested on macOS 14+ with up to 3 displays. Mouse, gesture, and clipboard event s
 ## Requirements
 
 - **macOS 14 (Sonoma) or later** — visual-mode screen capture uses `ScreenCaptureKit`, which raises the floor from macOS 13 to 14.
-- **Apple Silicon (arm64).** Intel Macs are not yet supported.
+- **Apple Silicon (arm64) and Intel (x86_64).** Shipped as a universal binary, so it runs natively on both.
 - **Accessibility permissions** — granted on first run. macOS prompts you; allow `neomouse` in **System Settings → Privacy & Security → Accessibility**, then relaunch.
 
 The release binary is ad-hoc signed (not Apple Developer ID signed). The Homebrew and Nix install paths handle this transparently; the manual-download path needs one extra command to clear the Gatekeeper quarantine — see below.
@@ -53,7 +53,7 @@ Update later with `brew upgrade neomouse`. Uninstall with `brew uninstall neomou
 
 ### 2. Nix
 
-Apple Silicon only. Requires Nix with [flakes enabled](https://nixos.wiki/wiki/Flakes#Enable_flakes_temporarily) (`experimental-features = nix-command flakes` in `~/.config/nix/nix.conf`).
+Works on both Apple Silicon (`aarch64-darwin`) and Intel (`x86_64-darwin`). Requires Nix with [flakes enabled](https://nixos.wiki/wiki/Flakes#Enable_flakes_temporarily) (`experimental-features = nix-command flakes` in `~/.config/nix/nix.conf`).
 
 **Try it once without installing anything:**
 
@@ -89,11 +89,11 @@ Update later with `nix profile upgrade neomouse`, or `nix profile upgrade --all`
 }
 ```
 
-Then reference the package wherever you list packages — e.g. inside your nix-darwin module:
+Then reference the package wherever you list packages. Using `${pkgs.system}` selects the right output automatically on both Apple Silicon (`aarch64-darwin`) and Intel (`x86_64-darwin`) — e.g. inside your nix-darwin module:
 
 ```nix
 environment.systemPackages = [
-  neomouse.packages.aarch64-darwin.default
+  neomouse.packages.${pkgs.system}.default
 ];
 ```
 
@@ -101,9 +101,11 @@ environment.systemPackages = [
 
 ```nix
 home.packages = [
-  neomouse.packages.aarch64-darwin.default
+  neomouse.packages.${pkgs.system}.default
 ];
 ```
+
+> If `pkgs.system` isn't in scope, hard-code your platform: `aarch64-darwin` on Apple Silicon, `x86_64-darwin` on Intel.
 
 Rebuild your system (`darwin-rebuild switch --flake .#<host>` or `home-manager switch --flake .#<user>`). Pick up new releases with `nix flake update neomouse` and rebuild.
 
@@ -112,14 +114,14 @@ Rebuild your system (`darwin-rebuild switch --flake .#<host>` or `home-manager s
 ```sh
 # Pick the latest release URL from https://github.com/KangaZero/neomouse/releases
 VERSION=v0.0.0
-curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neomouse-${VERSION}-macos-arm64.tar.gz"
-curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neomouse-${VERSION}-macos-arm64.tar.gz.sha256"
+curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neomouse-${VERSION}-macos-universal.tar.gz"
+curl -LO "https://github.com/KangaZero/neomouse/releases/download/${VERSION}/neomouse-${VERSION}-macos-universal.tar.gz.sha256"
 
 # Verify the download
-shasum -a 256 -c "neomouse-${VERSION}-macos-arm64.tar.gz.sha256"
+shasum -a 256 -c "neomouse-${VERSION}-macos-universal.tar.gz.sha256"
 
 # Extract — produces neomouse.app/ in the current directory
-tar -xzf "neomouse-${VERSION}-macos-arm64.tar.gz"
+tar -xzf "neomouse-${VERSION}-macos-universal.tar.gz"
 
 # Clear macOS download quarantine (only needed on the manual path)
 xattr -dr com.apple.quarantine ./neomouse.app

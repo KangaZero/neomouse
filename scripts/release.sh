@@ -10,12 +10,24 @@
 #                                            no formula bump, no flake push)
 #   SKIP_HOMEBREW=1 scripts/release.sh …   # skip just the Homebrew tap bump
 #   SKIP_FLAKE=1    scripts/release.sh …   # skip just the flake.nix bump
+#   SKIP_TAG=1      scripts/release.sh …   # don't create/push the git tag, and
+#                                            skip the branch / clean-tree /
+#                                            origin-sync preconditions. Used by
+#                                            the GitHub Actions release workflow,
+#                                            which is itself *triggered by* a
+#                                            pushed tag — so the tag already
+#                                            exists and we must not re-create it.
 #
 # DRY_RUN is for `just release-local` / local end-to-end testing of the
 # release tarball before cutting an actual release.
+#
+# The build is a UNIVERSAL Mach-O (arm64 + x86_64 via `swift build --arch …`),
+# so the single tarball runs natively on both Apple Silicon and Intel Macs.
+# `--arch` cross-slicing requires full Xcode (not just Command Line Tools).
 
 set -euo pipefail
 DRY_RUN="${DRY_RUN:-}"
+SKIP_TAG="${SKIP_TAG:-}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -46,8 +58,8 @@ command -v gh >/dev/null || fail "gh CLI not installed (brew install gh)"
 command -v swift >/dev/null || fail "swift toolchain not found"
 gh auth status >/dev/null 2>&1 || fail "gh is not authenticated (run: gh auth login)"
 
-if [[ "$DRY_RUN" == "1" ]]; then
-  echo "  DRY_RUN: skipping branch / tag / origin-sync checks (local test build)"
+if [[ "$DRY_RUN" == "1" || "$SKIP_TAG" == "1" ]]; then
+  echo "  $([ "$DRY_RUN" = "1" ] && echo DRY_RUN || echo SKIP_TAG): skipping branch / tag / origin-sync checks"
 else
   BRANCH="$(git rev-parse --abbrev-ref HEAD)"
   [[ "$BRANCH" == "main" ]] || fail "Not on main (on: $BRANCH)"
@@ -65,16 +77,26 @@ fi
 
 echo "  branch: $(git rev-parse --abbrev-ref HEAD)"
 echo "  commit: $(git rev-parse --short HEAD)"
-echo "  tag:    $VERSION$([ "$DRY_RUN" = "1" ] && echo "  (DRY_RUN — not actually tagged)")"
+echo "  tag:    $VERSION$([ "$DRY_RUN" = "1" ] && echo "  (DRY_RUN — not actually tagged)")$([ "$SKIP_TAG" = "1" ] && echo "  (SKIP_TAG — tag assumed to already exist)")"
 
 # ---------- build ----------
 
-step "Building release binary"
-swift build -c release
+step "Building release binary (universal: arm64 + x86_64)"
+# `--arch arm64 --arch x86_64` produces a single fat Mach-O so the one tarball
+# runs natively on both Apple Silicon and Intel. Needs full Xcode for the
+# x86_64 macOS SDK slice; bare Command Line Tools can't cross-slice.
+swift build -c release --arch arm64 --arch x86_64
 
 BIN=".build/release/neomouse"
 [[ -x "$BIN" ]] || fail "Build did not produce $BIN"
 file "$BIN"
+
+# Guard the universal contract — abort if either slice is missing rather than
+# silently shipping a single-arch binary under the "-universal" name.
+ARCHS="$(lipo -archs "$BIN")"
+echo "  slices: $ARCHS"
+[[ "$ARCHS" == *arm64* ]] || fail "Binary is missing the arm64 slice (got: $ARCHS)"
+[[ "$ARCHS" == *x86_64* ]] || fail "Binary is missing the x86_64 slice (got: $ARCHS) — full Xcode required for cross-slicing"
 
 # ---------- assemble .app wrapper ----------
 #
@@ -112,7 +134,7 @@ codesign -dv "$APP_DIR" 2>&1 | grep -E "Signature|Format|Identifier" || true
 
 step "Packaging"
 mkdir -p dist
-ARCHIVE_NAME="neomouse-${VERSION}-macos-arm64.tar.gz"
+ARCHIVE_NAME="neomouse-${VERSION}-macos-universal.tar.gz"
 ARCHIVE="dist/$ARCHIVE_NAME"
 
 # Archive contains `neomouse.app/` at the top level (Contents/Info.plist,
@@ -152,9 +174,14 @@ fi
 
 # ---------- tag + push ----------
 
-step "Tagging $VERSION"
-git tag -a "$VERSION" -m "$VERSION"
-git push origin "$VERSION"
+if [[ "$SKIP_TAG" == "1" ]]; then
+  step "Skipping tag creation (SKIP_TAG=1 — workflow was triggered by this tag)"
+  git rev-parse "$VERSION" >/dev/null 2>&1 || fail "SKIP_TAG=1 but tag $VERSION does not exist"
+else
+  step "Tagging $VERSION"
+  git tag -a "$VERSION" -m "$VERSION"
+  git push origin "$VERSION"
+fi
 
 # ---------- release notes ----------
 
@@ -202,7 +229,7 @@ $(git log --pretty=format:'- %s' "$RANGE")
 
 ## Platform
 
-macOS 14+, Apple Silicon only.
+macOS 14+. Universal binary — runs natively on Apple Silicon **and** Intel Macs.
 EOF
 
 # ---------- gh release ----------
@@ -226,8 +253,17 @@ else
   # Append tap-dir cleanup to the existing trap (which removes NOTES_FILE).
   trap 'rm -f "$NOTES_FILE"; rm -rf "$TAP_DIR"' EXIT
 
-  git clone --quiet --depth 1 \
-    git@github.com:KangaZero/homebrew-neomouse.git "$TAP_DIR"
+  # Locally we push over SSH (your key). In CI there's no SSH key, so when
+  # HOMEBREW_TAP_TOKEN is set (a PAT with contents:write on the tap repo —
+  # github.token can't push to a *different* repo) clone/push over HTTPS with
+  # the token embedded. The token is only ever in this short-lived URL string.
+  if [[ -n "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+    TAP_REMOTE="https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/KangaZero/homebrew-neomouse.git"
+  else
+    TAP_REMOTE="git@github.com:KangaZero/homebrew-neomouse.git"
+  fi
+
+  git clone --quiet --depth 1 "$TAP_REMOTE" "$TAP_DIR"
 
   FORMULA="$TAP_DIR/Formula/neomouse.rb"
   [[ -f "$FORMULA" ]] || fail "Formula not found at $FORMULA in cloned tap"

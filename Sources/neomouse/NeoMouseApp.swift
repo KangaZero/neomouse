@@ -63,6 +63,7 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
 
     // Configuration settings
     let isDisableKeyInput: Bool
+    let frontAppFollowsMouse: Bool
     let modeOnStart: NeomouseType.ConfigMode
     /// Gates the vim-showcmd KeyCast overlay. When false, the panel is never
     /// shown regardless of what's pending; when true, KeyCast.update() decides
@@ -115,6 +116,8 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
             config?.motion.isClampCursorToCurrentScreen ?? Config.Motion.defaultIsClampCursorToCurrentScreen
         self.isDisableKeyInput =
             config?.configuration.isDisableKeyInput ?? Config.Configuration.defaultIsDisableKeyInput
+        self.frontAppFollowsMouse =
+            config?.configuration.frontAppFollowsMouse ?? Config.Configuration.defaultIsDisableKeyInput
         self.modeOnStart =
             config?.configuration.modeOnStart ?? Config.Configuration.defaultModeOnStart
         self.isShowKeyCast =
