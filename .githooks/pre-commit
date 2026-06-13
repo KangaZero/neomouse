@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Pre-commit: lint staged Swift files and run the test suite.
+# Pre-commit: lint staged Swift files, validate config when staged, and run the
+# test suite. Kept deliberately fast (staged-only lint, conditional config
+# check) — heavier release-build verification lives in the pre-push hook.
 # Enable with: scripts/setup-hooks.sh (sets core.hooksPath=.githooks)
 
 set -euo pipefail
@@ -19,6 +21,24 @@ if [[ -n "$staged_swift" ]]; then
         || fail "swift format lint failed. Run: swift format -i --recursive Sources Tests"
 else
     echo "No staged Swift files; skipping lint."
+fi
+
+# ---------- check config when settings.toml / schema staged ----------
+#
+# Cheap (sub-second) and only runs when the config or its schema is actually
+# part of this commit, so most commits skip it. taplo is optional tooling
+# (install via `mise install` or `brew install taplo`) — skip gracefully when
+# it's absent rather than blocking a commit on a missing dev dependency.
+
+staged_cfg=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(settings\.toml|schema/)' || true)
+
+if [[ -n "$staged_cfg" ]]; then
+    if command -v taplo >/dev/null; then
+        step "Checking settings.toml against schema (taplo check)"
+        taplo check settings.toml || fail "taplo check failed. Fix settings.toml against schema/settings.schema.json."
+    else
+        echo "settings.toml/schema staged but taplo not installed; skipping config check."
+    fi
 fi
 
 # ---------- run tests ----------
