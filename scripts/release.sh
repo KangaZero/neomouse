@@ -87,7 +87,11 @@ step "Building release binary (universal: arm64 + x86_64)"
 # x86_64 macOS SDK slice; bare Command Line Tools can't cross-slice.
 swift build -c release --arch arm64 --arch x86_64
 
-BIN=".build/release/neomouse"
+# A multi-`--arch` build does NOT populate the `.build/release` symlink (that
+# only exists for single-arch builds); the universal product lands under
+# `.build/apple/Products/Release/`. Ask SwiftPM for the real path rather than
+# hardcoding it — `--show-bin-path` resolves without rebuilding.
+BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/neomouse"
 [[ -x "$BIN" ]] || fail "Build did not produce $BIN"
 file "$BIN"
 
