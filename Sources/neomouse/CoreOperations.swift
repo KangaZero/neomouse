@@ -365,5 +365,16 @@ extension NeoMouse {
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             VisualHighlightOverlay.shared.passAppState(state: appState)
         }
+        @MainActor
+        static func setFrontMostAppOnCursorAsActiveIfNeeded(
+            _ appState: NeoMouseState,
+        ) {
+            guard appState.frontAppFollowsMouse else { return }
+            guard let frontmostAppUnderCursor = Mouse.frontmostAppUnder() else {
+                return
+                    debug("setFrontMostAppOnCursorAsActiveIfNeeded fn - no frontmostAppUnderCursor")
+            }
+            Mouse.setActiveApp(frontmostAppUnderCursor)
+        }
     }
 }

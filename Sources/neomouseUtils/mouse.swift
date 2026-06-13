@@ -231,6 +231,7 @@ public enum Mouse {
         // Ordinary Dock-visible apps only. Skips menu-bar agents, background /
         // accessory processes (incl. neomouse itself — an LSUIElement app), and
         // prohibited apps, none of which should ever be force-focused.
+        debug("setActiveApp fn - App activationPolicy: \(String(describing: app.activationPolicy))")
         guard app.activationPolicy == .regular else { return false }
         // Never yank focus onto ourselves.
         guard app.processIdentifier != NSRunningApplication.current.processIdentifier else { return false }

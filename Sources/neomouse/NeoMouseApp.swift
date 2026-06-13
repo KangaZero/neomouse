@@ -569,8 +569,11 @@ struct NeoMouse: App {
                         currentPendingNormalOperation: op,
                         operationCountAsString: countString
                     )
+                    NeoMouse.autoSnapToCursorBandIfNeeded(appState: appState)
+                    CoreOperations.setFrontMostAppOnCursorAsActiveIfNeeded(appState)
                 case .find:
                     NeoMouse.handleFindMode(ctx: ctx)
+                    CoreOperations.setFrontMostAppOnCursorAsActiveIfNeeded(appState)
                 case .command(let command, let suggestionIndex):
                     NeoMouse.handleCommandMode(
                         ctx: ctx, currentCommand: command, suggestionIndex: suggestionIndex
@@ -579,6 +582,7 @@ struct NeoMouse: App {
                     NeoMouse.handleMenuMode(ctx: ctx, window: window)
                 case .specialFind:
                     NeoMouse.handleSpecialFindMode(ctx: ctx)
+                    CoreOperations.setFrontMostAppOnCursorAsActiveIfNeeded(appState)
                 }
 
                 //INFO: after every non-integer keypress, excluding 0 which can be both a command and a count, we reset the operationCountAsString to nil to reset the count for the next operation
@@ -699,8 +703,7 @@ struct NeoMouse: App {
         }
     }
 
-    /// Auto-snap: when `is_auto_snap` is enabled and a cursor band
-    /// (`:cursorline` / `:cursorcolumn`) is currently showing, warp the cursor
+    /// Auto-snap: when `is_auto_snap` is enabled warp the cursor
     /// to the centre of the grid cell it sits in so it lines up exactly with
     /// the highlighted band. Reuses `NumbersOverlay.snapCursor()` — the same
     /// path the manual `s` keybind uses — which recomputes the cell index from
@@ -709,7 +712,14 @@ struct NeoMouse: App {
     /// active.
     @MainActor
     static func autoSnapToCursorBandIfNeeded(appState: NeoMouseState) {
-        guard appState.isAutoSnap, NumbersOverlay.shared.hasActiveCursorBand else { return }
+        guard appState.isAutoSnap else {
+            return
+            //             debug(
+            // """
+            // autoSnapToCursorBandIfNeeded fn - isAutoSnap : \(String(describing:appState.isAutoSnap))\
+            //                                   hasActiveCursorBand : \(String(describing: NumbersOverlay.shared.hasActiveCursorBand))
+            // """)
+        }
         NumbersOverlay.shared.snapCursor()
     }
 
