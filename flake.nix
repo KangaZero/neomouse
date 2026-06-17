@@ -53,7 +53,7 @@
           meta = {
             description = "Vim-motion mouse control daemon for macOS";
             homepage = "https://github.com/KangaZero/neomouse";
-            license = pkgs.lib.licenses.mit;
+            license = pkgs.lib.licenses.gpl3Only;
             platforms = pkgs.lib.platforms.darwin;
             mainProgram = "neomouse";
           };

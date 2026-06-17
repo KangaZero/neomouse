@@ -417,4 +417,4 @@ Pre-built binaries are published on the [Releases page](https://github.com/Kanga
 
 ## License
 
-[MIT](LICENSE). Copyright © 2026 Samuel Wai Weng Yong.
+[GPL-3.0](LICENSE). Copyright © 2026 Samuel Wai Weng Yong.
