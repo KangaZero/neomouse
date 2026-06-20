@@ -109,3 +109,30 @@ final class SettingsWatcher {
         source = nil
     }
 }
+
+extension NeoMouse {
+    /// Wire the settings.toml hot-reload watcher: on each successful
+    /// re-decode, push the new theme/behavior into appState; on failure,
+    /// keep the old config and surface the error via toast.
+    @MainActor
+    static func installSettingsReloadObserver(appState: NeoMouseState) {
+        // Hot reload: watch the resolved settings.toml for writes; on every
+        // successful re-decode, push the new theme into appState (which is
+        // @Published → SwiftUI views observing `state` re-render). Decode
+        // failures keep the old config in place and surface the error via
+        // toast so the user knows what to fix without scraping the log file.
+        NeoMouse.settingsWatcher = SettingsWatcher { result in
+            MainActor.assumeIsolated {
+                switch result {
+                case .success(let config):
+                    appState.reload(from: config)
+                    debug("SettingsWatcher: reloaded \(Config.resolvedURL?.path ?? "<unknown>")")
+                    ToastManager.shared.show("Reloaded settings.toml")
+                case .failure(let error):
+                    debug("SettingsWatcher: reload failed — \(error)")
+                    ToastManager.shared.show("Reload failed: \(error)")
+                }
+            }
+        }
+    }
+}
