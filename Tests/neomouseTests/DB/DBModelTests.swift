@@ -37,13 +37,9 @@ struct DBModelTests {
     @Test("Session.update persists a rename")
     func sessionUpdate() {
         Session.update(at: 1, newSessionName: "Renamed")
-        // KNOWN BUG (#5): Session.update filters by the wrong column
-        // (`Columns.name == sessionId`) and never calls `update(db)`, so the
-        // rename silently no-ops. Pinned as a known issue so the suite stays
-        // green until #5 fixes it — flip this to a plain #expect afterward.
-        withKnownIssue("Session.update is a no-op — see issue #5") {
-            #expect(Session.getByName(sessionName: "Renamed")?.id == 1)
-        }
+        #expect(Session.getByName(sessionName: "Renamed")?.id == 1)
+        // The original name no longer resolves once the rename has persisted.
+        #expect(Session.getByName(sessionName: "Cookiezi") == nil)
     }
 
     // MARK: - Mark
