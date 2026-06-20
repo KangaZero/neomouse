@@ -658,11 +658,11 @@ extension NeoMouse {
             }
             Task { @MainActor in
                 do {
-                    let screenshotTaken = try await screenshot(
+                    let screenshotTaken = try await Screenshot.capture(
                         rect: currentDisplayBounds, excluding: CoreOperations.excludedWindowIDsForScreenshot
                     )
                     guard let screenshot = screenshotTaken else {
-                        debug("ggyG screenshot failed: \(String(describing: screenshot))")
+                        debug("ggyG screenshot failed: \(String(describing: screenshotTaken))")
                         return
                     }
                     debug("ggvG screenshot success: \(screenshot)")

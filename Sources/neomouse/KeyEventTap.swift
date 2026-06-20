@@ -54,7 +54,7 @@ extension NeoMouse {
         // rather than hitting a cryptic SCStreamError -3801 mid-operation.
         // Like Accessibility, the grant only takes effect on next launch —
         // a denied/just-granted state here means yanking will fail this run.
-        if !requestScreenCaptureAccess() {
+        if !Screenshot.requestAccess() {
             debug(
                 "Screen Recording not granted — system prompt shown; yank/screenshot operations will fail until granted and relaunched"
             )

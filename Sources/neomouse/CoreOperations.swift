@@ -37,7 +37,7 @@ extension NeoMouse {
             Task { @MainActor in
                 do {
                     guard
-                        let screenshotTaken = try await screenshotMultiDisplay(
+                        let screenshotTaken = try await Screenshot.captureMultiDisplay(
                             rect: rect, excluding: Self.excludedWindowIDsForScreenshot)
                     else {
                         debug("No screenshotTaken for operation: y")
@@ -57,7 +57,7 @@ extension NeoMouse {
                     appState.isVisual = false
                 } catch {
                     debug("For operation 'y' screenshot failed: \(error)")
-                    if isScreenCaptureTCCError(error) {
+                    if Screenshot.isTCCError(error) {
                         // -3801: user denied Screen Recording. Surface an
                         // actionable toast and open the right Settings pane
                         // — otherwise the user sees nothing copy and has no
@@ -66,7 +66,7 @@ extension NeoMouse {
                         ToastManager.shared.show(
                             "Screen Recording permission required for yank — enable in System Settings, then relaunch"
                         )
-                        openScreenRecordingSettings()
+                        Screenshot.openRecordingSettings()
                     }
                     appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
                     appState.isVisual = false
