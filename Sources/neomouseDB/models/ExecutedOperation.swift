@@ -102,107 +102,107 @@ public struct ExecutedOperation: Codable,
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }
-}
 
-public func getExecutedOperationsBySessionId(sessionId: Int64) -> [ExecutedOperation]? {
-    do {
-        return try dbQueue.read { db in
-            try ExecutedOperation
-                .filter(ExecutedOperation.Columns.sessionId == sessionId)
-                .order(ExecutedOperation.Columns.createdAt.desc)
-                .fetchAll(db)
+    public static func getAll(sessionId: Int64) -> [ExecutedOperation]? {
+        do {
+            return try dbQueue.read { db in
+                try ExecutedOperation
+                    .filter(ExecutedOperation.Columns.sessionId == sessionId)
+                    .order(ExecutedOperation.Columns.createdAt.desc)
+                    .fetchAll(db)
+            }
+        } catch {
+            debug("ExecutedOperation.getAll error: ", error)
+            return nil
         }
-    } catch {
-        debug("getExecutedOperationsBySessionId error: ", error)
-        return nil
     }
-}
 
-public func getSingleExecutedOperationByIdAndSessionId(
-    id: Int64,
-    sessionId: Int64
-) -> ExecutedOperation? {
-    do {
-        return try dbQueue.read { db in
-            try ExecutedOperation
-                .filter(ExecutedOperation.Columns.sessionId == sessionId)
-                .filter(ExecutedOperation.Columns.id == id)
-                .fetchOne(db)
-        }
-    } catch {
-        debug("getSingleExecutedOperationByIdAndSessionId error: ", error)
-        return nil
-    }
-}
-
-public func getExecutedOperationByNameAndSessionId(
-    name: OperationName,
-    sessionId: Int64
-) -> [ExecutedOperation]? {
-    do {
-        return try dbQueue.read { db in
-            try ExecutedOperation
-                .filter(ExecutedOperation.Columns.sessionId == sessionId)
-                .filter(ExecutedOperation.Columns.name == name)
-                .order(ExecutedOperation.Columns.createdAt.desc)
-                .fetchAll(db)
-        }
-    } catch {
-        debug("getExecutedoperationByNameAndSessionId error: ", error)
-        return nil
-    }
-}
-
-public func setExecutedOperation(
-    name: OperationName,
-    isVisual: Bool,
-    startCGXPoint: Double?,
-    startCGYPoint: Double?,
-    endCGXPoint: Double,
-    endCGYPoint: Double,
-    keysUsed: String,
-    mode: ModeName,
-    sessionId: Int64
-) {
-    do {
-        try dbQueue.write { db in
-            var newExecutedOperation = ExecutedOperation(
-                name: name,
-                isVisual: isVisual,
-                startCGXPoint: startCGXPoint,
-                startCGYPoint: startCGYPoint,
-                endCGXPoint: endCGXPoint,
-                endCGYPoint: endCGYPoint,
-                keysUsed: keysUsed,
-                mode: mode,
-                createdAt: Date(),
-                sessionId: sessionId
-            )
-            try newExecutedOperation.insert(db)
-        }
-    } catch {
-        debug("setExecutedOperation error: ", error)
-    }
-}
-
-public func deleteExecutedOperation(
-    id: Int64,
-    sessionId: Int64
-) {
-    do {
-        try dbQueue.write { db in
-            guard
-                let existing =
-                    try ExecutedOperation
+    public static func get(
+        id: Int64,
+        sessionId: Int64
+    ) -> ExecutedOperation? {
+        do {
+            return try dbQueue.read { db in
+                try ExecutedOperation
                     .filter(ExecutedOperation.Columns.sessionId == sessionId)
                     .filter(ExecutedOperation.Columns.id == id)
                     .fetchOne(db)
-            else {
-                return debug("Cannot find existing executed operation to delete")
             }
-            try existing.delete(db)
+        } catch {
+            debug("ExecutedOperation.get error: ", error)
+            return nil
         }
-    } catch {
-        debug("deleteExecutedOperation error: ", error)
+    }
+
+    public static func getAll(
+        name: OperationName,
+        sessionId: Int64
+    ) -> [ExecutedOperation]? {
+        do {
+            return try dbQueue.read { db in
+                try ExecutedOperation
+                    .filter(ExecutedOperation.Columns.sessionId == sessionId)
+                    .filter(ExecutedOperation.Columns.name == name)
+                    .order(ExecutedOperation.Columns.createdAt.desc)
+                    .fetchAll(db)
+            }
+        } catch {
+            debug("ExecutedOperation.getAll(name:) error: ", error)
+            return nil
+        }
+    }
+
+    public static func set(
+        name: OperationName,
+        isVisual: Bool,
+        startCGXPoint: Double?,
+        startCGYPoint: Double?,
+        endCGXPoint: Double,
+        endCGYPoint: Double,
+        keysUsed: String,
+        mode: ModeName,
+        sessionId: Int64
+    ) {
+        do {
+            try dbQueue.write { db in
+                var newExecutedOperation = ExecutedOperation(
+                    name: name,
+                    isVisual: isVisual,
+                    startCGXPoint: startCGXPoint,
+                    startCGYPoint: startCGYPoint,
+                    endCGXPoint: endCGXPoint,
+                    endCGYPoint: endCGYPoint,
+                    keysUsed: keysUsed,
+                    mode: mode,
+                    createdAt: Date(),
+                    sessionId: sessionId
+                )
+                try newExecutedOperation.insert(db)
+            }
+        } catch {
+            debug("ExecutedOperation.set error: ", error)
+        }
+    }
+
+    public static func delete(
+        id: Int64,
+        sessionId: Int64
+    ) {
+        do {
+            try dbQueue.write { db in
+                guard
+                    let existing =
+                        try ExecutedOperation
+                        .filter(ExecutedOperation.Columns.sessionId == sessionId)
+                        .filter(ExecutedOperation.Columns.id == id)
+                        .fetchOne(db)
+                else {
+                    return debug("Cannot find existing executed operation to delete")
+                }
+                try existing.delete(db)
+            }
+        } catch {
+            debug("ExecutedOperation.delete error: ", error)
+        }
     }
 }
