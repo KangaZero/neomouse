@@ -232,7 +232,7 @@ public enum Mouse {
         // accessory processes (incl. neomouse itself — an LSUIElement app), and
         // prohibited apps, none of which should ever be force-focused.
         debug("setActiveApp fn - App activationPolicy: \(String(describing: app.activationPolicy))")
-        guard app.activationPolicy == .regular else { return false }
+        guard app.activationPolicy == .regular || app.activationPolicy == .accessory else { return false }
         // Never yank focus onto ourselves.
         guard app.processIdentifier != NSRunningApplication.current.processIdentifier else { return false }
         // Already frontmost → nothing to do.

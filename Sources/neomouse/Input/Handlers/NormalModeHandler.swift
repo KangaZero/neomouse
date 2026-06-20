@@ -789,24 +789,25 @@ extension NeoMouse {
             )
             break
         case "'":  //goToMark
-            guard event.modifierFlags.rawValue == 256 else {
-                return appState.mode = .normal(
-                    currentPendingOperation: .none,
-                    operationCountAsString: nil
-                )
-            }
+            //TODO Add only ctrl and cmd guard, as depending on the keyboard layout, need a modifier like shift or option to use the key
+            // guard event.modifierFlags.rawValue == 256 else {
+            //     return appState.mode = .normal(
+            //         currentPendingOperation: .none,
+            //         operationCountAsString: nil
+            //     )
+            // }
             appState.mode = .normal(
                 currentPendingOperation: .goToMark,
                 operationCountAsString: nil
             )
             break
         case "`":  //goToMarkExactState
-            guard event.modifierFlags.rawValue == 256 else {
-                return appState.mode = .normal(
-                    currentPendingOperation: .none,
-                    operationCountAsString: nil
-                )
-            }
+            // guard event.modifierFlags.rawValue == 256 else {
+            //     return appState.mode = .normal(
+            //         currentPendingOperation: .none,
+            //         operationCountAsString: nil
+            //     )
+            // }
             appState.mode = .normal(
                 currentPendingOperation: .goToMarkExactState,
                 operationCountAsString: nil
@@ -837,6 +838,7 @@ extension NeoMouse {
                     operationCountAsString: nil
                 )
             }
+            SettingsWindow.shared.hide()
             HelpDialog.shared.toggle()
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             break

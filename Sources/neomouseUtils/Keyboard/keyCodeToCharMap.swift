@@ -61,23 +61,51 @@ private func translate(
     return String(utf16CodeUnits: chars, count: charCount)
 }
 
-/// Layout-aware translation of `keyCode` to its unmodified character against
-/// the user's current keyboard layout (or the ASCII-capable fallback when
-/// the current source is an IME).
+/// Layout-**aware** translation: the unmodified character `keyCode` produces
+/// under the user's *current* keyboard layout (or the ASCII-capable fallback
+/// when the current source is an IME with no Unicode layout data).
+///
+/// Unlike `latinASCIIChar`, this honors non-Latin layouts — the same physical
+/// key returns the native-script character the user actually types.
+///
+/// - Parameter keyCode: A macOS hardware key code (0–127), e.g. `4` is the
+///   physical "h"-position key.
+/// - Returns: The unmodified character for that key, or `nil` if it maps to no
+///   printable character (e.g. an arrow key) under the resolved layout.
+///
+/// - Example:
+///   ```
+///   keyCodeToChar(4)   // "h" on US/ABC  ·  "р" on Russian  ·  "ч" on …
+///   ```
 public func keyCodeToChar(_ keyCode: UInt16) -> String? {
     translate(keyCode: keyCode)
 }
 
-/// Translate `keyCode` against an ASCII-capable Latin layout regardless of
-/// what the user is currently typing in. Use this when matching Vim keybinds
-/// so `h`/`j`/`k`/`l` still resolve while the user is on Cyrillic, Greek,
-/// Pinyin, Hangul, etc.
+/// Translate a physical `keyCode` to the character a US/Latin (ASCII-capable)
+/// layout would produce — **regardless** of the user's current input source.
+/// Use this for Vim keybind matching so `h`/`j`/`k`/`l` keep resolving while
+/// the user is on Cyrillic, Greek, Pinyin, Hangul, etc.
 ///
-/// `modifiers` accepts the raw `NSEvent.ModifierFlags.rawValue` — only Shift
-/// and Option are forwarded to `UCKeyTranslate` (Cmd / Ctrl / CapsLock don't
-/// change the character produced by a physical key in standard layouts, and
-/// including them only confuses the translator).
-public func asciiChar(forKeyCode keyCode: UInt16, modifiers: UInt = 0) -> String? {
+/// Only Shift and Option from `modifiers` affect the result; Cmd / Ctrl /
+/// CapsLock are ignored (they don't change which character a physical key
+/// emits in standard layouts, and forwarding them only confuses the translator).
+///
+/// - Parameters:
+///   - keyCode: A macOS hardware key code (0–127). e.g. `4` = "h"-key,
+///     `5` = "g"-key, `18` = the "1"/"!" key.
+///   - modifiers: Raw `NSEvent.ModifierFlags.rawValue`. Defaults to `0`
+///     (the unmodified character).
+/// - Returns: The produced character, or `nil` if the key code maps to no
+///   printable character.
+///
+/// - Example:
+///   ```
+///   latinASCIIChar(keyCode: 4)                     // "h"
+///   latinASCIIChar(keyCode: 4,  modifiers: shift)  // "H"
+///   latinASCIIChar(keyCode: 18, modifiers: shift)  // "!"
+///   latinASCIIChar(keyCode: 0,  modifiers: cmd)    // "a"  (Cmd ignored)
+///   ```
+public func latinASCIIChar(keyCode: UInt16, modifiers: UInt = 0) -> String? {
     // UCKeyTranslate's modifier byte is Carbon EventModifiers >> 8:
     //   shiftKey  (0x0200) >> 8 = 0x02
     //   optionKey (0x0800) >> 8 = 0x08
@@ -87,18 +115,39 @@ public func asciiChar(forKeyCode keyCode: UInt16, modifiers: UInt = 0) -> String
     return translate(keyCode: keyCode, modifiers: carbon, forceLatin: true)
 }
 
-/// Convenience: ASCII-canonical character for `event`, equivalent in semantics
-/// to `event.characters` (shift/option applied) but layout-independent.
+/// ASCII-canonical character an `NSEvent` produced — same semantics as
+/// `event.characters` (Shift **and** Option applied) but layout-independent.
+/// Delegates to `latinASCIIChar` with the event's full modifier flags.
+///
+/// - Parameter event: A key event.
+/// - Returns: The produced character, or `nil` for keys with no printable
+///   character.
+///
+/// - Example:
+///   ```
+///   // pressing ⇧2 → "@"   ·   pressing ⌥a → "å"   ·   pressing h-key → "h"
+///   ```
 public func asciiChar(forEvent event: NSEvent) -> String? {
-    asciiChar(forKeyCode: event.keyCode, modifiers: event.modifierFlags.rawValue)
+    latinASCIIChar(keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue)
 }
 
-/// Convenience: ASCII-canonical character for `event`, equivalent in semantics
-/// to `event.charactersIgnoringModifiers` (only shift respected, Cmd/Ctrl/Opt
-/// stripped) but layout-independent.
+/// ASCII-canonical character for `event` ignoring Option — same semantics as
+/// `event.charactersIgnoringModifiers` (only Shift respected; Cmd/Ctrl/Opt
+/// stripped) but layout-independent. Use when Option must not change which
+/// keybind matches.
+///
+/// - Parameter event: A key event.
+/// - Returns: The produced character, or `nil` for keys with no printable
+///   character.
+///
+/// - Example:
+///   ```
+///   // pressing ⇧2 → "@"   ·   pressing ⌥a → "a"
+///   //   (vs asciiChar(forEvent:) which yields "å" for ⌥a)
+///   ```
 public func asciiCharIgnoringModifiers(forEvent event: NSEvent) -> String? {
-    asciiChar(
-        forKeyCode: event.keyCode,
+    latinASCIIChar(
+        keyCode: event.keyCode,
         modifiers: event.modifierFlags.rawValue & NSEvent.ModifierFlags.shift.rawValue
     )
 }

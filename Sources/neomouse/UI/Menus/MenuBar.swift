@@ -122,7 +122,7 @@ private struct MenuBarContent: View {
             Button("Marks") { openMenu(.marks) }
             Button("Registers") { openMenu(.register) }
             Button("Command Line") { openCommandLine() }
-            Button("Help") { HelpDialog.shared.toggle() }
+            Button("Help") { HelpDialog.shared.toggle(forceToggle: true) }
             Button("Settings…") { openSettings() }
                 .keyboardShortcut(",", modifiers: .command)
         }

@@ -20,6 +20,10 @@ extension NeoMouse {
     ) -> (NSEvent) -> Void {
         return { event in
             MainActor.assumeIsolated {
+                // Reset the ⌘E-only swallow flag at the start of every keystroke.
+                // See NeoMouse.swallowCurrentKeyEvent — it is ONLY set (below) by
+                // the ⌘E deactivation branch and must not be repurposed.
+                NeoMouse.swallowCurrentKeyEvent = false
                 let _currentCGPoint = Mouse.location()
                 //IMPORTANT: both _currentScreenSize && currentDisplayBounds will default to main screen if nothing is found
                 let _currentScreenSize = Screen.currentSize()
@@ -118,6 +122,10 @@ extension NeoMouse {
                         MarksMenu.shared.hide()
                         RegisterMenu.shared.hide()
                         ToastManager.shared.show("NeoMouse Deactivated")
+                        // Consume this ⌘E so deactivating doesn't type an "e"
+                        // into the focused app (honored by KeyEventTap's return).
+                        // This is the ONLY place the flag is ever set.
+                        NeoMouse.swallowCurrentKeyEvent = true
                         return
                     }
                 }
