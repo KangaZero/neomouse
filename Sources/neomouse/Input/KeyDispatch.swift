@@ -148,6 +148,12 @@ extension NeoMouse {
                         operationCountAsString: countString
                     )
                     NeoMouse.autoSnapToCursorBandIfNeeded(appState: appState)
+                    // Keep the visual-selection end on the cursor after every
+                    // motion — the synthetic move event the monitor relies on
+                    // gets coalesced under rapid keyboard motions. No-op when
+                    // not in visual mode. After autoSnap so it reflects the
+                    // final, post-snap cursor position.
+                    NeoMouse.syncVisualEndToCursor(appState: appState)
                     CoreOperations.setFrontMostAppOnCursorAsActiveIfNeeded(appState)
                 case .find:
                     NeoMouse.handleFindMode(ctx: ctx)

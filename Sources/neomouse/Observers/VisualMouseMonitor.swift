@@ -64,4 +64,19 @@ extension NeoMouse {
             mouseMonitor = nil
         }
     }
+
+    /// Sync the visual-selection end-point to the cursor's current position.
+    ///
+    /// Keyboard motions warp the cursor with `CGWarpMouseCursorPosition`; the
+    /// synthetic `.mouseMoved` that `Mouse.moveToGlobal` posts to feed the
+    /// global monitor gets coalesced by the window server under rapid motions,
+    /// so the highlight only caught up every few keystrokes. Calling this after
+    /// every normal-mode keypress updates the end-point directly from the
+    /// (synchronously warped, authoritative) cursor position, so the selection
+    /// rectangle tracks every motion. No-op outside visual mode.
+    @MainActor
+    static func syncVisualEndToCursor(appState: NeoMouseState) {
+        guard appState.isVisual, let loc = Mouse.location() else { return }
+        appState.setVisualEnd(loc)
+    }
 }
