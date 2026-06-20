@@ -34,12 +34,53 @@ struct Command {
 /// sites are converted to `execute(_:context:)` after that.
 @MainActor
 enum ExecutionPipeline {
-    static let preHooks: [(Command, KeyEventContext) -> Void] = []
-    static let postHooks: [(Command, KeyEventContext) -> Void] = []
+    static let preHooks: [@MainActor (Command, KeyEventContext) -> Void] = []
+    // Recording runs for every command (record-everything decision). front_app
+    // / auto-snap are NOT here yet — they still fire coarsely at the dispatch
+    // (KeyDispatch). They move here (category-filtered) only once every relevant
+    // op flows through execute(), so the coarse calls can be removed without a
+    // double-fire window. Until then this post-hook is purely additive.
+    static let postHooks: [@MainActor (Command, KeyEventContext) -> Void] = [recordOperation]
 
     static func execute(_ command: Command, context: KeyEventContext) {
         for hook in preHooks { hook(command, context) }
         command.action()
         for hook in postHooks { hook(command, context) }
+    }
+
+    /// Snapshot the command's scalars on the MainActor and hand them to the
+    /// serial recorder (never captures `context` / its `NSEvent`).
+    private static func recordOperation(_ command: Command, _ context: KeyEventContext) {
+        OperationRecorder.shared.enqueue(
+            RecordedOperation(
+                name: command.name,
+                isVisual: command.isVisual,
+                startCGXPoint: command.startPoint.map { Double($0.x) },
+                startCGYPoint: command.startPoint.map { Double($0.y) },
+                endCGXPoint: Double(command.endPoint.x),
+                endCGYPoint: Double(command.endPoint.y),
+                keysUsed: command.keysUsed,
+                mode: command.mode,
+                sessionId: command.sessionId))
+    }
+}
+
+extension NeoMouse {
+    /// Run a screen-local cardinal motion through the pipeline: warp to
+    /// `target` and record it. The caller keeps ownership of the subsequent
+    /// `appState.mode` reset, since motions differ in what pending state they
+    /// leave behind (e.g. `gg` parks in `.gg`, `0` leaves the count alone).
+    @MainActor
+    static func executeMotion(
+        _ ctx: KeyEventContext, name: OperationName, keysUsed: String, toScreenLocal target: CGPoint
+    ) {
+        let appState = ctx.appState
+        ExecutionPipeline.execute(
+            Command(
+                name: name, keysUsed: keysUsed, isVisual: appState.isVisual, mode: .normal,
+                startPoint: appState.isVisual ? appState.visual.startPos : nil,
+                endPoint: target, sessionId: ctx.sessionId,
+                action: { Mouse.moveToScreenLocal(x: target.x, y: target.y) }),
+            context: ctx)
     }
 }
