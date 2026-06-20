@@ -71,7 +71,7 @@ public struct ExecutedOperation: Codable,
     FetchableRecord,
     MutablePersistableRecord
 {
-    public static let databaseTableName = "excecuted_operation"
+    public static let databaseTableName = "executed_operation"
     public var id: Int64?
     public var name: OperationName
     public var isVisual: Bool

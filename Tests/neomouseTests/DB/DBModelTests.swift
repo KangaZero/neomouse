@@ -154,25 +154,15 @@ struct DBModelTests {
 
     // MARK: - ExecutedOperation
 
-    // KNOWN BUG (#3 Step 0 / #5): `ExecutedOperation.databaseTableName` is
-    // misspelled "excecuted_operation", but initializeDB creates the table as
-    // "executed_operation" — so every query hits "no such table" and silently
-    // returns nil. There are no runtime callers yet (these tests are the
-    // first), so it's been dormant. The three tests below assert the intended
-    // behavior wrapped in withKnownIssue, so they stay green until the
-    // one-character constant fix lands; flip them to plain #expects then.
-
     @Test("ExecutedOperation.set then getAll returns the row")
     func execOpSetGetAll() {
         ExecutedOperation.set(
             name: .Esc, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
             endCGXPoint: 5, endCGYPoint: 6, keysUsed: "x", mode: .normal, sessionId: sessionId)
-        withKnownIssue("ExecutedOperation table-name typo — see #3 Step 0 / #5") {
-            let all = ExecutedOperation.getAll(sessionId: sessionId)
-            #expect(all?.count == 1)
-            #expect(all?.first?.keysUsed == "x")
-            #expect(all?.first?.name == .Esc)
-        }
+        let all = ExecutedOperation.getAll(sessionId: sessionId)
+        #expect(all?.count == 1)
+        #expect(all?.first?.keysUsed == "x")
+        #expect(all?.first?.name == .Esc)
     }
 
     @Test("ExecutedOperation.getAll(name:) filters by operation name")
@@ -183,24 +173,19 @@ struct DBModelTests {
         ExecutedOperation.set(
             name: .setMark, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
             endCGXPoint: 0, endCGYPoint: 0, keysUsed: "ma", mode: .normal, sessionId: sessionId)
-        withKnownIssue("ExecutedOperation table-name typo — see #3 Step 0 / #5") {
-            #expect(ExecutedOperation.getAll(name: .Esc, sessionId: sessionId)?.count == 1)
-            #expect(
-                ExecutedOperation.getAll(name: .setMark, sessionId: sessionId)?.first?.keysUsed
-                    == "ma")
-        }
+        #expect(ExecutedOperation.getAll(name: .Esc, sessionId: sessionId)?.count == 1)
+        #expect(
+            ExecutedOperation.getAll(name: .setMark, sessionId: sessionId)?.first?.keysUsed == "ma")
     }
 
     @Test("ExecutedOperation.get by id, then delete")
-    func execOpGetDelete() {
+    func execOpGetDelete() throws {
         ExecutedOperation.set(
             name: .Esc, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
             endCGXPoint: 0, endCGYPoint: 0, keysUsed: "x", mode: .normal, sessionId: sessionId)
-        withKnownIssue("ExecutedOperation table-name typo — see #3 Step 0 / #5") {
-            let id = try #require(ExecutedOperation.getAll(sessionId: sessionId)?.first?.id)
-            #expect(ExecutedOperation.get(id: id, sessionId: sessionId)?.id == id)
-            ExecutedOperation.delete(id: id, sessionId: sessionId)
-            #expect(ExecutedOperation.getAll(sessionId: sessionId)?.isEmpty == true)
-        }
+        let id = try #require(ExecutedOperation.getAll(sessionId: sessionId)?.first?.id)
+        #expect(ExecutedOperation.get(id: id, sessionId: sessionId)?.id == id)
+        ExecutedOperation.delete(id: id, sessionId: sessionId)
+        #expect(ExecutedOperation.getAll(sessionId: sessionId)?.isEmpty == true)
     }
 }
