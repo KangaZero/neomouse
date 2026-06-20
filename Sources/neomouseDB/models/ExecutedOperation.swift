@@ -2,12 +2,12 @@ import Foundation
 import GRDB
 import neomouseUtils
 
-public enum ModeName: Equatable, Codable, DatabaseValueConvertible {
+public enum ModeName: Equatable, Codable, Sendable, DatabaseValueConvertible {
     case disabled, normal, find, command
 }
 
 //INFO: moveMoved type expanded to all 8 directions, and also added motion to start/end of line/screen. This is to capture more fine-grained info about the motion operation, which can be useful for analysis and recommendations. For example, if we see a lot of motionYPlus (k) operations,etc
-public enum MotionOperationType: Equatable, Codable, DatabaseValueConvertible {
+public enum MotionOperationType: Equatable, Codable, Sendable, DatabaseValueConvertible {
     case motionXMinus,  //h
         motionXPlus,  //l
         motionYMinus,  //j
@@ -17,11 +17,13 @@ public enum MotionOperationType: Equatable, Codable, DatabaseValueConvertible {
         motionYMin,  //G
         motionYMax,  //gg
         motionXMid,  //gm
-        motionYMid  //M
+        motionYMid,  //M
+        motionToLine,  //Ng / NG — absolute row; count rides in keysUsed
+        motionToColumn  //N| — absolute column; count rides in keysUsed
 }
 
 //INFO: refer to types used: https://developer.apple.com/documentation/coregraphics/cgeventtype
-public enum MouseOperationType: Equatable, Codable, DatabaseValueConvertible {
+public enum MouseOperationType: Equatable, Codable, Sendable, DatabaseValueConvertible {
     case leftMouseDown,
         rightMouseDown,
         otherMouseDown,
@@ -37,7 +39,7 @@ public enum MouseOperationType: Equatable, Codable, DatabaseValueConvertible {
         scrollWheelRight
 }
 
-public enum TrackpadOperationType: Equatable, Codable, DatabaseValueConvertible {
+public enum TrackpadOperationType: Equatable, Codable, Sendable, DatabaseValueConvertible {
     case pinchZoomIn,
         pinchZoomOut,
         smartMagnify,
@@ -51,7 +53,7 @@ public enum TrackpadOperationType: Equatable, Codable, DatabaseValueConvertible 
         toggleNotificationsCenter  // swipe left from right edge with 2 or 3 fingers
 }
 
-public enum OperationName: Equatable, Codable, DatabaseValueConvertible {
+public enum OperationName: Equatable, Codable, Sendable, DatabaseValueConvertible {
     case MotionOperationType(MotionOperationType),
         MouseOperationType(MouseOperationType),
         TrackpadOperationType(TrackpadOperationType),
@@ -63,7 +65,29 @@ public enum OperationName: Equatable, Codable, DatabaseValueConvertible {
         goToMark,
         jumpAdjacentScreen,
         setMacro,
-        goToMacro
+        goToMacro,
+        // Visual mode
+        visualToggle,  // v
+        visualLineSelect,  // V
+        visualSwapAnchor,  // o / O
+        visualYank,  // y (visual)
+        // Registers
+        selectRegister,  // "{r}
+        registerYank,
+        registerDelete,
+        registerPaste,
+        // Find mode
+        find,  // f
+        quickGridFind,  // Nf
+        specialFind,  // Space+f
+        // UI surfaces
+        toggleHelp,  // ?
+        openCommandLine,  // :
+        // Misc actions
+        snapToGrid,  // s
+        // Ex-style commands — `name` maps 1:1 onto Config.Command
+        // (:numbers/:relativenumbers/:cursorline/…/:restart/:quit).
+        exCommand(name: String)
 }
 
 public struct ExecutedOperation: Codable,

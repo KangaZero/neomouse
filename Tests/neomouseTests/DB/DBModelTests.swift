@@ -188,4 +188,17 @@ struct DBModelTests {
         ExecutedOperation.delete(id: id, sessionId: sessionId)
         #expect(ExecutedOperation.getAll(sessionId: sessionId)?.isEmpty == true)
     }
+
+    @Test("ExecutedOperation persists and reads back an exCommand associated value")
+    func execOpExCommandRoundTrip() throws {
+        // Validates that OperationName's DatabaseValueConvertible bridging
+        // carries the `exCommand(name:)` payload through SQLite intact.
+        ExecutedOperation.set(
+            name: .exCommand(name: "numbers"), isVisual: false, startCGXPoint: nil,
+            startCGYPoint: nil, endCGXPoint: 0, endCGYPoint: 0, keysUsed: ":numbers",
+            mode: .command, sessionId: sessionId)
+        let row = try #require(ExecutedOperation.getAll(sessionId: sessionId)?.first)
+        #expect(row.name == .exCommand(name: "numbers"))
+        #expect(row.keysUsed == ":numbers")
+    }
 }
