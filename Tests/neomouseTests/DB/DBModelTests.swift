@@ -201,4 +201,24 @@ struct DBModelTests {
         #expect(row.name == .exCommand(name: "numbers"))
         #expect(row.keysUsed == ":numbers")
     }
+
+    @Test("OperationRecorder drains enqueued operations to the table")
+    func recorderPersists() async throws {
+        let recorder = OperationRecorder()
+        recorder.enqueue(
+            RecordedOperation(
+                name: .Esc, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
+                endCGXPoint: 1, endCGYPoint: 2, keysUsed: "first", mode: .normal,
+                sessionId: sessionId))
+        recorder.enqueue(
+            RecordedOperation(
+                name: .snapToGrid, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
+                endCGXPoint: 3, endCGYPoint: 4, keysUsed: "second", mode: .normal,
+                sessionId: sessionId))
+        // Single consumer drains the AsyncStream FIFO; give it time to write both.
+        try await Task.sleep(for: .milliseconds(500))
+        let all = ExecutedOperation.getAll(sessionId: sessionId)
+        #expect(all?.count == 2)
+        #expect(Set(all?.map(\.keysUsed) ?? []) == ["first", "second"])
+    }
 }
