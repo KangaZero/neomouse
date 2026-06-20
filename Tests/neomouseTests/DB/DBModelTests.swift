@@ -188,4 +188,37 @@ struct DBModelTests {
         ExecutedOperation.delete(id: id, sessionId: sessionId)
         #expect(ExecutedOperation.getAll(sessionId: sessionId)?.isEmpty == true)
     }
+
+    @Test("ExecutedOperation persists and reads back an exCommand associated value")
+    func execOpExCommandRoundTrip() throws {
+        // Validates that OperationName's DatabaseValueConvertible bridging
+        // carries the `exCommand(name:)` payload through SQLite intact.
+        ExecutedOperation.set(
+            name: .exCommand(name: "numbers"), isVisual: false, startCGXPoint: nil,
+            startCGYPoint: nil, endCGXPoint: 0, endCGYPoint: 0, keysUsed: ":numbers",
+            mode: .command, sessionId: sessionId)
+        let row = try #require(ExecutedOperation.getAll(sessionId: sessionId)?.first)
+        #expect(row.name == .exCommand(name: "numbers"))
+        #expect(row.keysUsed == ":numbers")
+    }
+
+    @Test("OperationRecorder drains enqueued operations to the table")
+    func recorderPersists() async throws {
+        let recorder = OperationRecorder()
+        recorder.enqueue(
+            RecordedOperation(
+                name: .Esc, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
+                endCGXPoint: 1, endCGYPoint: 2, keysUsed: "first", mode: .normal,
+                sessionId: sessionId))
+        recorder.enqueue(
+            RecordedOperation(
+                name: .snapToGrid, isVisual: false, startCGXPoint: nil, startCGYPoint: nil,
+                endCGXPoint: 3, endCGYPoint: 4, keysUsed: "second", mode: .normal,
+                sessionId: sessionId))
+        // Single consumer drains the AsyncStream FIFO; give it time to write both.
+        try await Task.sleep(for: .milliseconds(500))
+        let all = ExecutedOperation.getAll(sessionId: sessionId)
+        #expect(all?.count == 2)
+        #expect(Set(all?.map(\.keysUsed) ?? []) == ["first", "second"])
+    }
 }

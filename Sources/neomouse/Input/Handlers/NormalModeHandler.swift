@@ -85,7 +85,9 @@ extension NeoMouse {
                 let target = MotionTarget.leftEdge(
                     localY: localCGPoint.y,
                     gridInset: appState.gridInset)
-                Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                NeoMouse.executeMotion(
+                    ctx, name: .MotionOperationType(.motionXMin), keysUsed: "0",
+                    toScreenLocal: CGPoint(x: target.x, y: target.y))
                 return
             case "1", "2", "3", "4", "5", "6", "7", "8", "9":
                 guard event.modifierFlags.rawValue == 256, asciiKey?.count == 1 else {
@@ -209,7 +211,10 @@ extension NeoMouse {
                         gridInset: appState.gridInset,
                         rowsOnScreen: appState.resolvedGrid(usable: _ggUsable).rows,
                         count: operationCount)
-                    Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                    NeoMouse.executeMotion(
+                        ctx, name: .MotionOperationType(.motionToLine),
+                        keysUsed: "\(Int(operationCount))gg",
+                        toScreenLocal: CGPoint(x: target.x, y: target.y))
                     appState.mode = .normal(
                         currentPendingOperation: .none,
                         operationCountAsString: nil
@@ -223,7 +228,9 @@ extension NeoMouse {
                     let target = MotionTarget.top(
                         localX: localCGPoint.x,
                         gridInset: appState.gridInset)
-                    Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                    NeoMouse.executeMotion(
+                        ctx, name: .MotionOperationType(.motionYMax), keysUsed: "gg",
+                        toScreenLocal: CGPoint(x: target.x, y: target.y))
                     appState.mode = .normal(
                         currentPendingOperation: .gg,
                         operationCountAsString: nil
@@ -256,7 +263,9 @@ extension NeoMouse {
                 let target = MotionTarget.horizontalMiddle(
                     localY: localCGPoint.y,
                     screenWidth: currentScreenSize.width)
-                Mouse.moveToScreenLocal(x: target.x, y: target.y)
+                NeoMouse.executeMotion(
+                    ctx, name: .MotionOperationType(.motionXMid), keysUsed: "gm",
+                    toScreenLocal: CGPoint(x: target.x, y: target.y))
                 appState.mode = .normal(
                     currentPendingOperation: .none,
                     operationCountAsString: nil
@@ -780,24 +789,25 @@ extension NeoMouse {
             )
             break
         case "'":  //goToMark
-            guard event.modifierFlags.rawValue == 256 else {
-                return appState.mode = .normal(
-                    currentPendingOperation: .none,
-                    operationCountAsString: nil
-                )
-            }
+            //TODO Add only ctrl and cmd guard, as depending on the keyboard layout, need a modifier like shift or option to use the key
+            // guard event.modifierFlags.rawValue == 256 else {
+            //     return appState.mode = .normal(
+            //         currentPendingOperation: .none,
+            //         operationCountAsString: nil
+            //     )
+            // }
             appState.mode = .normal(
                 currentPendingOperation: .goToMark,
                 operationCountAsString: nil
             )
             break
         case "`":  //goToMarkExactState
-            guard event.modifierFlags.rawValue == 256 else {
-                return appState.mode = .normal(
-                    currentPendingOperation: .none,
-                    operationCountAsString: nil
-                )
-            }
+            // guard event.modifierFlags.rawValue == 256 else {
+            //     return appState.mode = .normal(
+            //         currentPendingOperation: .none,
+            //         operationCountAsString: nil
+            //     )
+            // }
             appState.mode = .normal(
                 currentPendingOperation: .goToMarkExactState,
                 operationCountAsString: nil
@@ -828,6 +838,7 @@ extension NeoMouse {
                     operationCountAsString: nil
                 )
             }
+            SettingsWindow.shared.hide()
             HelpDialog.shared.toggle()
             appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
             break

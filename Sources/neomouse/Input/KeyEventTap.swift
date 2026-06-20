@@ -150,8 +150,12 @@ extension NeoMouse {
                                 // app may also react (e.g. Esc closes its picker). Accepted
                                 // tradeoff so Cmd-E / Esc / Ctrl-W keep working as neomouse
                                 // chords without blocking system shortcuts.
+                                //
+                                // Exception: the ⌘E activate/deactivate chord sets
+                                // `swallowCurrentKeyEvent` (see NeoMouseApp) so it is
+                                // dropped here instead of typing an "e" into the app.
                                 NeoMouse.keyHandler?(nsEvent)
-                                return false
+                                return NeoMouse.swallowCurrentKeyEvent
                             }
                         }
 

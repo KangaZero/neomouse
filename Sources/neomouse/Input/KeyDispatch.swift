@@ -20,6 +20,10 @@ extension NeoMouse {
     ) -> (NSEvent) -> Void {
         return { event in
             MainActor.assumeIsolated {
+                // Reset the ⌘E-only swallow flag at the start of every keystroke.
+                // See NeoMouse.swallowCurrentKeyEvent — it is ONLY set (below) by
+                // the ⌘E deactivation branch and must not be repurposed.
+                NeoMouse.swallowCurrentKeyEvent = false
                 let _currentCGPoint = Mouse.location()
                 //IMPORTANT: both _currentScreenSize && currentDisplayBounds will default to main screen if nothing is found
                 let _currentScreenSize = Screen.currentSize()
@@ -118,6 +122,10 @@ extension NeoMouse {
                         MarksMenu.shared.hide()
                         RegisterMenu.shared.hide()
                         ToastManager.shared.show("NeoMouse Deactivated")
+                        // Consume this ⌘E so deactivating doesn't type an "e"
+                        // into the focused app (honored by KeyEventTap's return).
+                        // This is the ONLY place the flag is ever set.
+                        NeoMouse.swallowCurrentKeyEvent = true
                         return
                     }
                 }
@@ -148,6 +156,12 @@ extension NeoMouse {
                         operationCountAsString: countString
                     )
                     NeoMouse.autoSnapToCursorBandIfNeeded(appState: appState)
+                    // Keep the visual-selection end on the cursor after every
+                    // motion — the synthetic move event the monitor relies on
+                    // gets coalesced under rapid keyboard motions. No-op when
+                    // not in visual mode. After autoSnap so it reflects the
+                    // final, post-snap cursor position.
+                    NeoMouse.syncVisualEndToCursor(appState: appState)
                     CoreOperations.setFrontMostAppOnCursorAsActiveIfNeeded(appState)
                 case .find:
                     NeoMouse.handleFindMode(ctx: ctx)

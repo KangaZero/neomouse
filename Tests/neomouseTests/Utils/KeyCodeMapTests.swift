@@ -22,27 +22,27 @@ struct AsciiCharTests {
 
     @Test("hjkl keycodes (US-positional) resolve to Latin h/j/k/l")
     func hjklLatin() {
-        #expect(asciiChar(forKeyCode: 4) == "h")
-        #expect(asciiChar(forKeyCode: 38) == "j")
-        #expect(asciiChar(forKeyCode: 40) == "k")
-        #expect(asciiChar(forKeyCode: 37) == "l")
+        #expect(latinASCIIChar(keyCode: 4) == "h")
+        #expect(latinASCIIChar(keyCode: 38) == "j")
+        #expect(latinASCIIChar(keyCode: 40) == "k")
+        #expect(latinASCIIChar(keyCode: 37) == "l")
     }
 
     @Test("Other normal-mode keys resolve as expected")
     func othersLatin() {
-        #expect(asciiChar(forKeyCode: 5) == "g")  // gg / G
-        #expect(asciiChar(forKeyCode: 9) == "v")  // visual
-        #expect(asciiChar(forKeyCode: 16) == "y")  // yank
-        #expect(asciiChar(forKeyCode: 35) == "p")  // paste
-        #expect(asciiChar(forKeyCode: 14) == "e")  // exit/toggle (Cmd+E)
+        #expect(latinASCIIChar(keyCode: 5) == "g")  // gg / G
+        #expect(latinASCIIChar(keyCode: 9) == "v")  // visual
+        #expect(latinASCIIChar(keyCode: 16) == "y")  // yank
+        #expect(latinASCIIChar(keyCode: 35) == "p")  // paste
+        #expect(latinASCIIChar(keyCode: 14) == "e")  // exit/toggle (Cmd+E)
     }
 
     @Test("Shift modifier produces the uppercase variant")
     func shiftUppercase() {
         let shift = NSEvent.ModifierFlags.shift.rawValue
-        #expect(asciiChar(forKeyCode: 4, modifiers: shift) == "H")
-        #expect(asciiChar(forKeyCode: 5, modifiers: shift) == "G")
-        #expect(asciiChar(forKeyCode: 16, modifiers: shift) == "Y")
+        #expect(latinASCIIChar(keyCode: 4, modifiers: shift) == "H")
+        #expect(latinASCIIChar(keyCode: 5, modifiers: shift) == "G")
+        #expect(latinASCIIChar(keyCode: 16, modifiers: shift) == "Y")
     }
 
     @Test("Shift+1 yields '!' (modifier byte reaches UCKeyTranslate correctly)")
@@ -50,23 +50,23 @@ struct AsciiCharTests {
         // Belt-and-braces: a wrong shift in the modifier conversion would
         // produce "1" or nothing here instead of "!".
         let shift = NSEvent.ModifierFlags.shift.rawValue
-        #expect(asciiChar(forKeyCode: 18, modifiers: shift) == "!")
+        #expect(latinASCIIChar(keyCode: 18, modifiers: shift) == "!")
     }
 
     @Test("Cmd / Ctrl modifiers do not change the produced character")
     func cmdCtrlIgnored() {
         let cmd = NSEvent.ModifierFlags.command.rawValue
         let ctrl = NSEvent.ModifierFlags.control.rawValue
-        #expect(asciiChar(forKeyCode: 0, modifiers: cmd) == "a")
-        #expect(asciiChar(forKeyCode: 0, modifiers: ctrl) == "a")
-        #expect(asciiChar(forKeyCode: 0, modifiers: cmd | ctrl) == "a")
+        #expect(latinASCIIChar(keyCode: 0, modifiers: cmd) == "a")
+        #expect(latinASCIIChar(keyCode: 0, modifiers: ctrl) == "a")
+        #expect(latinASCIIChar(keyCode: 0, modifiers: cmd | ctrl) == "a")
     }
 
     @Test("Cmd+Shift behaves like Shift alone for character translation")
     func cmdShiftEqualsShift() {
         let shift = NSEvent.ModifierFlags.shift.rawValue
         let cmd = NSEvent.ModifierFlags.command.rawValue
-        #expect(asciiChar(forKeyCode: 4, modifiers: shift) == asciiChar(forKeyCode: 4, modifiers: shift | cmd))
+        #expect(latinASCIIChar(keyCode: 4, modifiers: shift) == latinASCIIChar(keyCode: 4, modifiers: shift | cmd))
     }
 }
 
@@ -218,16 +218,16 @@ struct NonLatinLayoutFallbackTests {
         )
     }
 
-    @Test("asciiChar(forKeyCode: 4) is still 'h' even with non-Latin layouts installed")
+    @Test("latinASCIIChar(keyCode: 4) is still 'h' even with non-Latin layouts installed")
     func asciiHelperStillLatin() {
         // This is the load-bearing assertion: regardless of what installed
         // layouts exist on this host (and regardless of which one is
         // currently selected by the user), the helper routes through the
         // ASCII-capable layout fallback and gives a Latin letter.
-        #expect(asciiChar(forKeyCode: 4) == "h")
-        #expect(asciiChar(forKeyCode: 38) == "j")
-        #expect(asciiChar(forKeyCode: 40) == "k")
-        #expect(asciiChar(forKeyCode: 37) == "l")
+        #expect(latinASCIIChar(keyCode: 4) == "h")
+        #expect(latinASCIIChar(keyCode: 38) == "j")
+        #expect(latinASCIIChar(keyCode: 40) == "k")
+        #expect(latinASCIIChar(keyCode: 37) == "l")
     }
 
     @Test("charToKeyCodeMap exposes Latin a-z even with non-Latin layouts installed")

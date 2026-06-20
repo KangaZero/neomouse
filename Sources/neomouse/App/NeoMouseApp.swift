@@ -17,6 +17,19 @@ struct NeoMouse: App {
     static var modeObserver: AnyCancellable?
     static var isVisualObserver: AnyCancellable?
     static var settingsWatcher: SettingsWatcher?
+
+    // ⚠️⚠️ STRICTLY for the ⌘E activate/deactivate chord — NOTHING ELSE. ⚠️⚠️
+    //
+    // The keyHandler closure returns Void and so cannot tell the CGEventTap to
+    // drop an event. This one-shot flag is the ONLY sanctioned bridge, and it
+    // exists for ONE reason: ⌘E must never reach the focused app (deactivating
+    // would otherwise type an "e"). It is reset to false at the top of EVERY
+    // keystroke in `makeKeyHandler` and set true ONLY in the deactivation
+    // branch; `KeyEventTap` reads it to decide whether to swallow.
+    //
+    // DO NOT reuse this as a general "swallow this key" mechanism. Any other
+    // per-key swallowing belongs in KeyEventTap's pass-through filter, not here.
+    static var swallowCurrentKeyEvent = false
     static let sharedState: NeoMouseState = {
         // Deploy the bundled default `settings.toml` to ~/.config/neomouse/
         // on first launch so brew/nix/manual installs all get a usable

@@ -19,19 +19,20 @@ final class HelpDialog {
         window.map { CGWindowID($0.windowNumber) }
     }
 
-    func toggle() {
+    func toggle(forceToggle: Bool = false) {
         if let window, window.isVisible {
             hide()
         } else {
-            show()
+            show(forceToggle)
         }
     }
 
-    func show() {
+    func show(_ force: Bool = false) {
         // Gate: only available in normal mode. Stops `?` from opening the
         // help panel while typing in command mode, picking a target in
         // find mode, etc.
-        guard case .normal = NeoMouse.sharedState.mode else {
+        let isNormalMode = if case .normal = NeoMouse.sharedState.mode { true } else { false }
+        guard isNormalMode || force else {
             debug(
                 "HelpDialog.show: refused — (automatically hiding if shown) only available in normal mode (current: \(NeoMouse.sharedState.mode))"
             )
