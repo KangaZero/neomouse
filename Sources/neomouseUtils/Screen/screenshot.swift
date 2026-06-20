@@ -1,0 +1,170 @@
+import AppKit
+import ScreenCaptureKit
+import CoreGraphics
+
+/// Screen-capture namespace: TCC permission handling plus single- and
+/// multi-display capture via ScreenCaptureKit.
+public enum Screenshot {
+    /// Trigger the macOS Screen Recording TCC prompt if undecided, or return
+    /// the current grant state otherwise. Call at launch so the user sees the
+    /// system dialog before they ever try to yank — without this they'd hit a
+    /// cryptic SCStreamError -3801 ("The user declined TCCs...") only on the
+    /// first screenshot, with no obvious path to recovery.
+    ///
+    /// Returns `true` when access is granted, `false` when denied or still
+    /// pending the user's decision. The system shows the prompt at most once
+    /// per (bundle, decision-state); subsequent calls when denied just return
+    /// false without nagging.
+    public static func requestAccess() -> Bool {
+        CGRequestScreenCaptureAccess()
+    }
+
+    /// Detect the specific ScreenCaptureKit error code that means
+    /// "Screen Recording permission is missing." Used by CoreOperations.normalYank
+    /// to surface an actionable toast ("enable in System Settings") instead of
+    /// the raw error message.
+    ///
+    /// SCStreamError codes are defined in <ScreenCaptureKit/SCError.h>; -3801
+    /// is `SCStreamErrorUserDeclined`.
+    public static func isTCCError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain"
+            && nsError.code == -3801
+    }
+
+    /// Open System Settings directly to the Screen Recording pane. Best-effort:
+    /// the URL scheme has been stable across macOS 13–15 but isn't formally
+    /// documented. Falls back to opening the general Privacy pane if the
+    /// specific anchor doesn't resolve.
+    public static func openRecordingSettings() {
+        let urls = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy",
+        ]
+        for str in urls {
+            if let url = URL(string: str), NSWorkspace.shared.open(url) {
+                return
+            }
+        }
+    }
+
+    public static func capture(rect: CGRect, excluding ids: [CGWindowID] = []) async throws
+        -> CGImage?
+    {
+        let content = try await SCShareableContent.current
+
+        // Find the display that contains this rect
+        guard
+            let display = content.displays.first(where: { display in
+                display.frame.intersects(rect)
+            })
+        else {
+            return nil
+        }
+
+        let excluded = ids.isEmpty ? [] : content.windows.filter { ids.contains($0.windowID) }
+        let filter = SCContentFilter(display: display, excludingWindows: excluded)
+
+        let config = SCStreamConfiguration()
+
+        // Convert rect to display-local coordinates
+        let localRect = CGRect(
+            x: rect.origin.x - display.frame.origin.x,
+            y: rect.origin.y - display.frame.origin.y,
+            width: rect.width,
+            height: rect.height
+        )
+
+        config.sourceRect = localRect
+        config.width = Int(localRect.width)
+        config.height = Int(localRect.height)
+        config.showsCursor = false
+
+        let image = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: config
+        )
+        return image
+    }
+
+    public static func captureMultiDisplay(rect: CGRect, excluding ids: [CGWindowID] = [])
+        async throws -> CGImage?
+    {
+        let content = try await SCShareableContent.current
+
+        // Find all displays that intersect the rect
+        debug("relevantDisplays: displays \(content.displays)")
+        let relevantDisplays = content.displays.filter { $0.frame.intersects(rect) }
+        debug("captureMultiDisplay: found \(relevantDisplays.count) relevant displays for rect \(rect)")
+        guard !relevantDisplays.isEmpty else { return nil }
+
+        // If only one display, use the simpler path
+        if relevantDisplays.count == 1 {
+            return try await capture(rect: rect, excluding: ids)
+        }
+
+        // Capture each display's portion
+        var captures: [(image: CGImage, frame: CGRect)] = []
+
+        for display in relevantDisplays {
+            let intersection = rect.intersection(display.frame)
+            let localRect = CGRect(
+                x: intersection.origin.x - display.frame.origin.x,
+                y: intersection.origin.y - display.frame.origin.y,
+                width: intersection.width,
+                height: intersection.height
+            )
+
+            let excluded = ids.isEmpty ? [] : content.windows.filter { ids.contains($0.windowID) }
+            let filter = SCContentFilter(display: display, excludingWindows: excluded)
+            let config = SCStreamConfiguration()
+            config.sourceRect = localRect
+            config.width = Int(localRect.width)
+            config.height = Int(localRect.height)
+            config.showsCursor = false
+            do {
+                let image: CGImage = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: config
+                )
+                captures.append((image, intersection))
+            } catch {
+                debug("Error capturing image for display \(display.displayID): ", error)
+            }
+        }
+
+        // Stitch them into one image
+        return stitchImages(captures, targetRect: rect)
+    }
+
+    private static func stitchImages(_ captures: [(image: CGImage, frame: CGRect)], targetRect: CGRect) -> CGImage? {
+        let width = Int(targetRect.width)
+        let height = Int(targetRect.height)
+
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else {
+            return nil
+        }
+
+        // SCDisplay.frame uses CG-global coords (top-left origin, y-down).
+        // CGContext default = bottom-left origin, y-up. Flip Y so top display
+        // lands at top of buffer; else stacked displays end up vertically swapped.
+        for (image, frame) in captures {
+            let localX = frame.origin.x - targetRect.origin.x
+            let localY = targetRect.height - (frame.origin.y - targetRect.origin.y) - frame.height
+            let localFrame = CGRect(x: localX, y: localY, width: frame.width, height: frame.height)
+            context.draw(image, in: localFrame)
+        }
+
+        return context.makeImage()
+    }
+}

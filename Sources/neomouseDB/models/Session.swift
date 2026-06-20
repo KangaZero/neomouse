@@ -92,14 +92,15 @@ public struct Session: Codable, Identifiable, FetchableRecord, MutablePersistabl
     /// ```
     public static func update(at sessionId: Int64, newSessionName: String?) {
         do {
-            return try dbQueue.write { db in
-                guard var session = try Session.filter(Session.Columns.name == sessionId).fetchOne(db) else {
+            try dbQueue.write { db in
+                guard var session = try Session.filter(Session.Columns.id == sessionId).fetchOne(db) else {
                     return debug("Cannot find existing session in fn updateSession")
                 }
                 session.updatedAt = .now
                 if let newSessionName {
                     session.name = newSessionName
                 }
+                try session.update(db)
             }
         } catch {
             debug("updateSession error: ", error)

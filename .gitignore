@@ -25,3 +25,6 @@ dist/
 
 # Claude Code local settings
 .claude/
+
+# Stray run-log typo target (swift run ... 2>1)
+1/
