@@ -37,4 +37,13 @@ struct KeyEventContext {
     /// ASCII-normalized character with only shift respected. Mirrors
     /// `NSEvent.charactersIgnoringModifiers`.
     let asciiKeyBase: String?
+    /// `asciiKey` / `asciiKeyBase` after resolving the user's keymap back to the
+    /// canonical Vim char (`VimAsciiKeymap.canonical(forPhysical:)`). ONLY the
+    /// normal-mode handler reads these — every other mode (command typing,
+    /// mark/register names, menu search, find cell-picks) intentionally keeps
+    /// reading the raw `asciiKey`/`asciiKeyBase`/`event.characters`, so text
+    /// input is never remapped. With the default (identity) keymap these equal
+    /// the raw values.
+    let canonicalAsciiKey: String?
+    let canonicalAsciiKeyBase: String?
 }

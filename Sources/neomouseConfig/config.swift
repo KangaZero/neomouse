@@ -23,6 +23,10 @@ public struct Config: Decodable, Sendable {
     /// back to `Theme()` — every sub-theme initializes to defaults that
     /// match the app's pre-theme visual appearance.
     public let theme: Theme?
+    /// Optional, like `theme`. nil → `NeoMouseState` falls back to
+    /// `VimAsciiKeymap()` (the identity map), so a settings.toml without a
+    /// `[keymaps]` section behaves exactly as the built-in Vim bindings.
+    public let keymaps: VimAsciiKeymap?
 
     public struct Grid: Decodable, Sendable {
         public let inset: CGFloat

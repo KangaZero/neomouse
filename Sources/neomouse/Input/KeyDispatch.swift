@@ -81,6 +81,17 @@ extension NeoMouse {
                 // script.
                 let asciiKey = asciiChar(forEvent: event)
                 let asciiKeyBase = asciiCharIgnoringModifiers(forEvent: event)
+                // Resolve the pressed physical key back to its canonical Vim
+                // char ONCE. Fed only to the normal-mode handler (see
+                // KeyEventContext) so its hardcoded `case "h":` literals keep
+                // working while the user can rebind which physical key is "h".
+                // Identity under the default keymap → no behavior change.
+                let canonicalAsciiKey = appState.keymaps.canonical(forPhysical: asciiKey)
+                let canonicalAsciiKeyBase = appState.keymaps.canonical(forPhysical: asciiKeyBase)
+                debug(
+                    "[keymap] asciiKey \(String(describing: asciiKey)) → \(String(describing: canonicalAsciiKey)); "
+                        + "base \(String(describing: asciiKeyBase)) → \(String(describing: canonicalAsciiKeyBase))"
+                )
                 let _key = charToKeyCodeMap.keyChar(forKeyCode: event.keyCode) ?? "?"
                 debug(
                     """
@@ -96,7 +107,12 @@ extension NeoMouse {
                       operationCount = \(operationCount)
                     """
                 )
-                if asciiKey == "e" && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+                // Activation/deactivation chord: ⌘ + the (remappable) toggle key.
+                // Compares the RAW key (the toggle is its own binding, gated by
+                // ⌘ — not part of the canonical motion map). Default "e" → ⌘E.
+                if asciiKey == appState.keymaps.toggleActivation
+                    && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+                {
                     debug("appState = \(appState.mode)")
                     if case .disabled = appState.mode {
                         appState.mode = .normal(
@@ -143,7 +159,9 @@ extension NeoMouse {
                     currentScreenSize: currentScreenSize,
                     operationCount: operationCount,
                     asciiKey: asciiKey,
-                    asciiKeyBase: asciiKeyBase
+                    asciiKeyBase: asciiKeyBase,
+                    canonicalAsciiKey: canonicalAsciiKey,
+                    canonicalAsciiKeyBase: canonicalAsciiKeyBase
                 )
                 switch appState.mode {
                 case .disabled:

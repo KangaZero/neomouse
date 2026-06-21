@@ -85,6 +85,66 @@ is_show_key_cast = true
 is_auto_snap = false
 
 # ---------------------------------------------------------------------------
+# [keymaps] — remappable Vim keybindings
+# ---------------------------------------------------------------------------
+# Keyed by the CANONICAL Vim character; the value is the physical key you press
+# for it. Every binding is shown at its default below — edit a value to rebind
+# (e.g. `j = "n"` makes physical "n" do "down"). Remapping a key frees its old
+# default. Letters + symbols are remappable; digits 0-9 and special keys
+# (Esc / Tab / arrows / Return / F-keys) are fixed. Values are a single
+# character; symbol/space keys are quoted on the left. The whole section is
+# optional — omit it (or any line) to keep the built-in bindings.
+[keymaps]
+toggle_activation = "e"  # ⌘ + this key
+# Motion
+h = "h"
+j = "j"
+k = "k"
+l = "l"
+0 = "0"
+"$" = "$"
+"|" = "|"
+M = "M"
+G = "G"
+g = "g"
+m = "m"
+# Modes
+f = "f"
+F = "F"
+v = "v"
+V = "V"
+":" = ":"
+"?" = "?"
+" " = " "
+w = "w"
+s = "s"
+# Marks & Registers
+"'" = "'"
+"`" = "`"
+"\"" = "\""
+y = "y"
+Y = "Y"
+p = "p"
+P = "P"
+d = "d"
+D = "D"
+# Scroll
+u = "u"
+U = "U"
+H = "H"
+J = "J"
+K = "K"
+L = "L"
+W = "W"
+# Gestures
+r = "r"
+R = "R"
+"+" = "+"
+"-" = "-"
+S = "S"
+o = "o"
+O = "O"
+
 # [theme.*] — per-element visual overrides
 # ---------------------------------------------------------------------------
 # Every key below is at its built-in default. Remove or comment out any line
@@ -227,24 +287,4 @@ text_color     = "#ffffff"
 border_color   = "#ffffff2e"  # 0.18 white
 shadow_color   = "#0000008c"  # 0.55 black
 text_font      = { family = "", size = 24, weight = "bold", design = "monospaced" }
-#
-# [keymap]
-# # Motion keys. "modifier + key(s)" 
-# # key(s) can be a case-sensitive single char or a key name like "Enter", "Space", "Tab", "Backspace", "Delete", "UpArrow", "down", "left", "right"
-# # modifier: "ctrl", "control", "option", "alt", "shift", "cmd", "command"
-# # "ctrl" and "control" are the same, as are "option" and "alt". "cmd" or "command" is the Command key on Mac.
-# # eg "ctrl + h" or "alt + ctrl + h"
-# #
-# # numbers cannot be used
-# motion_x_minus = "h"
-# motion_y_minus = "j"
-# motion_x_plus = "k"
-# motion_y_plus = "l"
-#
-# motion_x_min = "0" # This is only exception
-# motion_x_max = "$"
-# motion_y_min = "G" # also same as shift + g
-# motion_y_max = "gg" 
-#
-#
 

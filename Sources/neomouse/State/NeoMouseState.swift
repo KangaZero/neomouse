@@ -88,6 +88,12 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
     // blocks renders identically to the pre-theme app.
     @Published var theme: Config.Theme
 
+    /// User-remappable Vim keybindings, keyed by canonical char. `@Published`
+    /// so the Settings window live-edits it and `SettingsWatcher` hot-reloads
+    /// it. Default == identity map → built-in bindings, behavior unchanged.
+    /// Read fresh each keystroke by `KeyDispatch` (`canonical(forPhysical:)`).
+    @Published var keymaps: Config.VimAsciiKeymap
+
     // Single init covers both paths: when neomouseConfig finds settings.toml,
     // every property comes from there; otherwise each falls back to the same
     // hardcoded values this class used before config wiring.
@@ -126,6 +132,7 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
         self.isAutoSnap =
             config?.configuration.isAutoSnap ?? Config.Configuration.defaultIsAutoSnap
         self.theme = config?.theme ?? Config.Theme()
+        self.keymaps = config?.keymaps ?? Config.VimAsciiKeymap()
 
         mode = {
             switch self.modeOnStart {
@@ -168,6 +175,14 @@ class NeoMouseState: ObservableObject, @unchecked Sendable {
         theme = config.theme ?? Config.Theme()
         isAutoSnap = config.configuration.isAutoSnap
         frontAppFollowsMouse = config.configuration.frontAppFollowsMouse
+        // Rebinding keys mid-sequence (e.g. while a .g / .gg / .registerAction
+        // pending op is armed) could desync the partially-typed chord, so reset
+        // to a clean normal state when the keymap may have changed.
+        let newKeymaps = config.keymaps ?? Config.VimAsciiKeymap()
+        if newKeymaps != keymaps {
+            keymaps = newKeymaps
+            mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
+        }
     }
 
     // MARK: - Visual selection helpers

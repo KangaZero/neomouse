@@ -49,6 +49,28 @@ extension NeoMouseState {
         )
     }
 
+    /// Two-way binding for the physical key bound to a canonical Vim char.
+    /// Get returns the resolved physical key (identity when unmapped); set
+    /// keeps only the last typed character and clears back to identity when it
+    /// equals the canonical char (so an unedited row stores no override).
+    func keymapBinding(forCanonical canonical: String) -> Binding<String> {
+        Binding(
+            get: { self.keymaps[canonical] },
+            set: { self.keymaps.setBinding(canonical: canonical, physical: String($0.suffix(1))) }
+        )
+    }
+
+    /// Two-way binding for the ⌘-activation chord key (kept to a single char).
+    func toggleActivationBinding() -> Binding<String> {
+        Binding(
+            get: { self.keymaps.toggleActivation },
+            set: { new in
+                let last = String(new.suffix(1))
+                if !last.isEmpty { self.keymaps.toggleActivation = last }
+            }
+        )
+    }
+
     /// Broadcast a single `family / weight / design` triple to every
     /// `ThemeFont`-typed leaf on `theme`, preserving each leaf's own
     /// `size`. Used by the Settings window's "Shared Font" section so a
@@ -161,9 +183,7 @@ enum ThemeWriter {
         } catch {
             return "read failed: \(error.localizedDescription)"
         }
-        let preserved = stripExistingThemeBlock(existing)
-        let serialized = serializeTheme(theme)
-        let combined = preserved + (preserved.hasSuffix("\n\n") ? "" : "\n") + serialized
+        let combined = replacingThemeBlock(in: existing, with: serializeTheme(theme))
         do {
             try combined.write(to: url, atomically: true, encoding: .utf8)
         } catch {
@@ -172,17 +192,41 @@ enum ThemeWriter {
         return nil
     }
 
-    /// Truncate at the first `[theme.` header line, preserving everything
-    /// above it (including the file's leading comments and the
-    /// non-theme `[grid]` / `[motion]` / `[visual]` / etc. sections).
-    private static func stripExistingThemeBlock(_ text: String) -> String {
-        guard let range = text.range(of: #"\n\[theme(\.|\])"#, options: .regularExpression) else {
-            // No existing [theme.*] block → append after a blank line.
-            return text.hasSuffix("\n") ? text : (text + "\n")
+    /// Replace the contiguous run of `[theme.*]` sections **in place** with the
+    /// regenerated block, preserving everything before AND after it. The theme
+    /// run spans from the first `[theme.*]` header to the next non-theme `[`
+    /// header (or EOF). Because content after the theme block survives, users
+    /// can place other sections (`[keymaps]`, etc.) after `[theme.*]` and order
+    /// the file's sections however they like. Appends after a blank line when
+    /// there's no theme block yet. (Theme sub-sections are assumed contiguous,
+    /// as shipped and as `serializeTheme` emits them.)
+    private static func replacingThemeBlock(in text: String, with block: String) -> String {
+        guard
+            let firstTheme = text.range(
+                of: #"(?m)^\[theme(\.|\])"#, options: .regularExpression)
+        else {
+            let prefix = text.hasSuffix("\n") ? text : (text + "\n")
+            return prefix + "\n" + block
         }
-        // Keep up to (but not including) the leading newline of the match.
-        // The match starts with "\n", so we slice from `range.lowerBound`.
-        return String(text[..<range.lowerBound]) + "\n"
+        // Walk forward from the first theme header to the first header line that
+        // isn't a `[theme…]` — that's where the theme run ends.
+        var spanEnd = text.endIndex
+        var cursor = firstTheme.upperBound
+        while let header = text.range(
+            of: #"(?m)^\["#, options: .regularExpression, range: cursor..<text.endIndex)
+        {
+            let headerLine = text[header.lowerBound...].prefix { $0 != "\n" }
+            if !headerLine.hasPrefix("[theme") {
+                spanEnd = header.lowerBound
+                break
+            }
+            cursor = header.upperBound
+        }
+        let before = String(text[..<firstTheme.lowerBound])
+        let after = String(text[spanEnd...])
+        let body = block.hasSuffix("\n") ? String(block.dropLast()) : block
+        let head = before.hasSuffix("\n") ? before : (before + "\n")
+        return after.isEmpty ? (head + body + "\n") : (head + body + "\n\n" + after)
     }
 
     private static func serializeTheme(_ t: Config.Theme) -> String {
@@ -442,6 +486,109 @@ enum ConfigWriter {
     }
 }
 
+// MARK: - TOML writer for the [keymaps] block
+
+/// Rewrites the `[keymaps]` section of the resolved settings.toml to match the
+/// live `VimAsciiKeymap`. Strips any existing `[keymaps]` block and re-emits it
+/// spliced in **before** the first `[theme.*]` header (so `ThemeWriter`, which
+/// preserves everything above the theme block, keeps it). Atomic write. Only
+/// non-identity overrides + `toggle_activation` are written (identity entries
+/// are the default and need no line).
+@MainActor
+enum KeymapWriter {
+    static func persist(_ keymaps: Config.VimAsciiKeymap) -> String? {
+        guard let url = Config.resolvedURL else {
+            return "no settings.toml found at any resolved path"
+        }
+        let existing: String
+        do {
+            existing = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            return "read failed: \(error.localizedDescription)"
+        }
+        let block = serialize(keymaps)
+        let combined: String
+        if let section = keymapsSectionRange(in: existing) {
+            // Replace the existing `[keymaps]` IN PLACE so the user's section
+            // ordering is preserved wherever they put it — before or after the
+            // theme block (ThemeWriter now rewrites theme in place too, so a
+            // post-theme section survives). We never move it.
+            var text = existing
+            text.replaceSubrange(section, with: block)
+            combined = text
+        } else {
+            // No `[keymaps]` yet → introduce it before the theme block (so the
+            // config sections group together), else at EOF.
+            combined = spliceBeforeTheme(block, into: existing)
+        }
+
+        do {
+            try combined.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            return "write failed: \(error.localizedDescription)"
+        }
+        return nil
+    }
+
+    /// Range of an existing `[keymaps]` section: its header line through the
+    /// first blank line / next `^[` header / EOF after it (whichever comes
+    /// first), so following sections' leading comments are left intact.
+    private static func keymapsSectionRange(in text: String) -> Range<String.Index>? {
+        guard
+            let header = text.range(
+                of: #"(?m)^\[keymaps\][ \t]*$"#, options: .regularExpression)
+        else { return nil }
+        let after = text[header.upperBound...]
+        let blank = after.range(of: #"(?m)^[ \t]*$"#, options: .regularExpression)?.lowerBound
+        let nextHeader = after.range(of: #"(?m)^\["#, options: .regularExpression)?.lowerBound
+        let end = [blank, nextHeader].compactMap { $0 }.min() ?? text.endIndex
+        return header.lowerBound..<end
+    }
+
+    /// Insert `block` immediately before the first `[theme.*]` header, else
+    /// append at EOF.
+    private static func spliceBeforeTheme(_ block: String, into text: String) -> String {
+        if let themeStart = text.range(
+            of: #"(?m)^\[theme(\.|\])"#, options: .regularExpression
+        )?.lowerBound {
+            var result = text
+            result.insert(contentsOf: block + "\n", at: themeStart)
+            return result
+        }
+        let prefix = text.hasSuffix("\n") ? text : text + "\n"
+        return prefix + "\n" + block
+    }
+
+    private static func serialize(_ keymaps: Config.VimAsciiKeymap) -> String {
+        var lines = ["[keymaps]"]
+        lines.append("toggle_activation = \"\(escape(keymaps.toggleActivation))\"  # ⌘ + this key")
+        // Emit every catalog binding (resolved value = override or its default)
+        // in catalog order, grouped, so the file documents all keys and
+        // round-trips like the [theme.*] block.
+        var lastGroup: Config.VimAsciiKeymap.Group?
+        for entry in Config.VimAsciiKeymap.catalog {
+            if entry.group != lastGroup {
+                lines.append("# \(entry.group.rawValue)")
+                lastGroup = entry.group
+            }
+            lines.append("\(tomlKey(entry.key)) = \"\(escape(keymaps[entry.key]))\"")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Bare key for `[A-Za-z0-9_]`, quoted otherwise (symbols / space).
+    private static func tomlKey(_ key: String) -> String {
+        let bareOK = key.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+        return bareOK ? key : "\"\(escape(key))\""
+    }
+
+    private static func escape(_ s: String) -> String {
+        if s == "\"" { return "\\\"" }
+        if s == "\\" { return "\\\\" }
+        return s
+    }
+}
+
 // MARK: - SettingsView
 
 /// Sections shown in the sidebar — order matches what's most-asked. "Shared
@@ -449,6 +596,7 @@ enum ConfigWriter {
 /// impactful theme tweak (it propagates to every overlay).
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case behavior = "Behavior"
+    case keybindings = "Keybindings"
     case sharedFont = "Shared Font"
     case toast = "Toast"
     case keyCast = "Key Cast"
@@ -465,6 +613,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .behavior: return "slider.horizontal.3"
+        case .keybindings: return "command"
         case .sharedFont: return "textformat"
         case .toast: return "bell.fill"
         case .keyCast: return "keyboard"
@@ -496,6 +645,7 @@ struct SettingsView: View {
                 Form {
                     switch selection {
                     case .behavior: BehaviorForm(state: state)
+                    case .keybindings: KeybindingsForm(state: state)
                     case .sharedFont: SharedFontForm(state: state)
                     case .toast: ToastForm(state: state)
                     case .keyCast: KeyCastForm(state: state)
@@ -528,6 +678,7 @@ struct SettingsView: View {
                 state.theme = Config.Theme()
                 state.isAutoSnap = Config.Configuration.defaultIsAutoSnap
                 state.frontAppFollowsMouse = Config.Configuration.defaultFrontAppFollowsMouse
+                state.keymaps = Config.VimAsciiKeymap()
                 saveResult = nil
             }
             Button("Save to settings.toml") {
@@ -540,6 +691,11 @@ struct SettingsView: View {
                 }
                 if let error = ConfigWriter.persistConfiguration(state.frontAppFollowsMouse, "front_app_follows_mouse")
                 {
+                    errors.append(error)
+                }
+                // Before ThemeWriter: [keymaps] sits above the [theme.*] block,
+                // and ThemeWriter preserves everything above it byte-for-byte.
+                if let error = KeymapWriter.persist(state.keymaps) {
                     errors.append(error)
                 }
                 if let error = ThemeWriter.persist(state.theme) {
@@ -641,6 +797,70 @@ private struct FontEditor: View {
 /// `ConfigWriter` (not `ThemeWriter`) on Save. Unlike the theme forms, these
 /// take effect the next time NeoMouse is active — the Settings window
 /// force-pauses NeoMouse while open, so there's nothing live to preview here.
+/// One editable binding row: action label + a single-key field. Type the
+/// literal key (e.g. "h", "H", "$"); only the last character is kept. Red
+/// outline when the key collides with another action's binding.
+private struct KeyRow: View {
+    let title: String
+    @Binding var key: String
+    var conflict: Bool = false
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            TextField("", text: $key)
+                .frame(width: 46)
+                .multilineTextAlignment(.center)
+                .textFieldStyle(.roundedBorder)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(conflict ? Color.red : Color.clear, lineWidth: 1.5))
+        }
+    }
+}
+
+/// Editor for the remappable Vim keybindings. Each row rebinds a canonical Vim
+/// char to a different physical key; edits are live (overlays/handlers read
+/// `state.keymaps` immediately) and persist via `KeymapWriter` on Save.
+private struct KeybindingsForm: View {
+    @ObservedObject var state: NeoMouseState
+
+    var body: some View {
+        let conflicts = state.keymaps.conflictingCanonicalKeys()
+
+        Section("Activation") {
+            KeyRow(title: "Toggle NeoMouse (with ⌘)", key: state.toggleActivationBinding())
+        }
+        Text(
+            "Rebind a Vim key to a different physical key. Digits and special keys (Esc / Tab / arrows / F-keys) are fixed."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        ForEach(Config.VimAsciiKeymap.Group.allCases, id: \.self) { group in
+            Section(group.rawValue) {
+                ForEach(
+                    Config.VimAsciiKeymap.catalog.filter { $0.group == group }, id: \.key
+                ) { entry in
+                    KeyRow(
+                        title: entry.label,
+                        key: state.keymapBinding(forCanonical: entry.key),
+                        conflict: conflicts.contains(entry.key))
+                }
+            }
+        }
+
+        if !conflicts.isEmpty {
+            Text(
+                "Some keys are bound to more than one action (highlighted). Allowed — modes disambiguate many — but may be ambiguous."
+            )
+            .font(.caption)
+            .foregroundStyle(.red)
+        }
+    }
+}
+
 private struct BehaviorForm: View {
     @ObservedObject var state: NeoMouseState
 
