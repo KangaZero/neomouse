@@ -589,6 +589,51 @@ enum KeymapWriter {
     }
 }
 
+// MARK: - Settings file bootstrap
+
+/// Creates a settings.toml when none exists yet, so a Save from the Settings
+/// window has a file to write into instead of failing with "no settings.toml
+/// found at any resolved path". Used as a fallback by the Save button.
+@MainActor
+enum SettingsBootstrap {
+    /// The standard path we create when nothing is resolved (matches the
+    /// resolution order's `~/.config/neomouse/` candidate).
+    static var defaultURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/neomouse/settings.toml")
+    }
+
+    /// Create `~/.config/neomouse/settings.toml`, seeded from the bundled
+    /// default template when available (a complete, valid config the writers
+    /// then overlay the live state onto), else an empty file the writers fill
+    /// with their managed sections. Returns nil on success or a short error.
+    static func createDefaultSettingsFile() -> String? {
+        let fm = FileManager.default
+        let target = defaultURL
+        do {
+            try fm.createDirectory(
+                at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        } catch {
+            return "could not create config directory: \(error.localizedDescription)"
+        }
+        let seed: String
+        if let bundled = Bundle.main.url(forResource: "settings", withExtension: "toml"),
+            let contents = try? String(contentsOf: bundled, encoding: .utf8)
+        {
+            seed = contents
+        } else {
+            seed = ""
+        }
+        do {
+            try seed.write(to: target, atomically: true, encoding: .utf8)
+        } catch {
+            return "could not create settings.toml: \(error.localizedDescription)"
+        }
+        debug("Created settings.toml at \(target.path) (seed: \(seed.isEmpty ? "empty" : "bundled default"))")
+        return nil
+    }
+}
+
 // MARK: - SettingsView
 
 /// Sections shown in the sidebar — order matches what's most-asked. "Shared
@@ -682,24 +727,36 @@ struct SettingsView: View {
                 saveResult = nil
             }
             Button("Save to settings.toml") {
-                // Config knobs first: ThemeWriter re-reads the file and
-                // preserves everything above the [theme.*] block byte-for-byte,
-                // so the is_auto_snap change must already be on disk by then.
-                var errors: [String] = []
-                if let error = ConfigWriter.persistConfiguration(state.isAutoSnap, "is_auto_snap") {
-                    errors.append(error)
+                // Order matters: ConfigWriter / KeymapWriter run first because
+                // ThemeWriter re-reads the file, and all three preserve the rest
+                // of the file in place. (Section order is up to the user.)
+                @MainActor func runWriters() -> [String] {
+                    var errors: [String] = []
+                    if let error = ConfigWriter.persistConfiguration(state.isAutoSnap, "is_auto_snap") {
+                        errors.append(error)
+                    }
+                    if let error = ConfigWriter.persistConfiguration(
+                        state.frontAppFollowsMouse, "front_app_follows_mouse")
+                    {
+                        errors.append(error)
+                    }
+                    if let error = KeymapWriter.persist(state.keymaps) {
+                        errors.append(error)
+                    }
+                    if let error = ThemeWriter.persist(state.theme) {
+                        errors.append(error)
+                    }
+                    return errors
                 }
-                if let error = ConfigWriter.persistConfiguration(state.frontAppFollowsMouse, "front_app_follows_mouse")
-                {
-                    errors.append(error)
-                }
-                // Before ThemeWriter: [keymaps] sits above the [theme.*] block,
-                // and ThemeWriter preserves everything above it byte-for-byte.
-                if let error = KeymapWriter.persist(state.keymaps) {
-                    errors.append(error)
-                }
-                if let error = ThemeWriter.persist(state.theme) {
-                    errors.append(error)
+                var errors = runWriters()
+                // If the save failed because there's no settings.toml yet,
+                // create one at ~/.config/neomouse/settings.toml and retry once.
+                if !errors.isEmpty, Config.resolvedURL == nil {
+                    if let createError = SettingsBootstrap.createDefaultSettingsFile() {
+                        errors.append(createError)
+                    } else {
+                        errors = runWriters()
+                    }
                 }
                 saveResult =
                     errors.isEmpty
