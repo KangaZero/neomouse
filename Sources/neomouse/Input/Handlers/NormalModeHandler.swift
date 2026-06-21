@@ -248,8 +248,12 @@ extension NeoMouse {
                             VisualHighlightOverlay.shared)
                 } else {
                     debug(".g - operation gv and isVisual=false, goToPreviousVisualState")
+                    guard event.modifierFlags.rawValue == 256 else {
+                        debug("gv: modifier held, ignoring goToPreviousVisualState")
+                        return
+                    }
                     CoreOperations.goToPreviousVisualState(
-                        event: event, appState: appState,
+                        appState: appState,
                         currentPendingNormalOperation: currentPendingNormalOperation)
                 }
                 return
@@ -288,12 +292,16 @@ extension NeoMouse {
                 )
                 return
             case ("v", false):
-                CoreOperations.toggleVisualState(
-                    event: event, appState: appState,
-                    currentPendingNormalOperation: currentPendingNormalOperation,
-                    currentCGPoint: currentCGPoint,
-                    visualHighlightOverlay: VisualHighlightOverlay.shared
-                )
+                // Mode is forced to .ggv right after regardless of the toggle,
+                // so gate with `if` (not guard/return) to preserve that behavior.
+                if event.modifierFlags.rawValue == 256 {
+                    CoreOperations.toggleVisualState(
+                        appState: appState,
+                        currentPendingNormalOperation: currentPendingNormalOperation,
+                        currentCGPoint: currentCGPoint,
+                        visualHighlightOverlay: VisualHighlightOverlay.shared
+                    )
+                }
                 appState.mode = .normal(
                     currentPendingOperation: .ggv,
                     operationCountAsString: nil
@@ -579,7 +587,7 @@ extension NeoMouse {
             case "y", "Y":
                 if appState.isVisual {
                     CoreOperations.normalYank(
-                        event: event, currentSession: currentSession, appState: appState)
+                        currentSession: currentSession, appState: appState)
                     CoreOperations.registerCurrentPasteboardItem(
                         currentSession: currentSession,
                         activeRegister: activeRegister)
@@ -594,20 +602,20 @@ extension NeoMouse {
                         return
                     } else {
                         CoreOperations.registerYank(
-                            event: event, currentSession: currentSession, activeRegister: activeRegister)
+                            currentSession: currentSession, activeRegister: activeRegister)
                     }
                 }
                 break
             case "d", "D":
                 CoreOperations.delete(
-                    event: event, appState: appState, currentSession: currentSession)
+                    appState: appState, currentSession: currentSession)
                 CoreOperations.registerCurrentPasteboardItem(
                     currentSession: currentSession,
                     activeRegister: activeRegister)
                 break
             case "p", "P":
                 CoreOperations.pasteFromRegister(
-                    event: event, appState: appState, currentSession: currentSession,
+                    appState: appState, currentSession: currentSession,
                     activeRegister: activeRegister)
                 break
             default:
@@ -790,24 +798,35 @@ extension NeoMouse {
             break
         case "'":  //goToMark
             //TODO Add only ctrl and cmd guard, as depending on the keyboard layout, need a modifier like shift or option to use the key
-            // guard event.modifierFlags.rawValue == 256 else {
-            //     return appState.mode = .normal(
-            //         currentPendingOperation: .none,
-            //         operationCountAsString: nil
-            //     )
-            // }
+            guard
+                event.modifierFlags.rawValue == 256
+                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                        .shift, .capsLock,
+                    ])
+            else {
+                return appState.mode = .normal(
+                    currentPendingOperation: .none,
+                    operationCountAsString: nil
+                )
+            }
+
             appState.mode = .normal(
                 currentPendingOperation: .goToMark,
                 operationCountAsString: nil
             )
             break
         case "`":  //goToMarkExactState
-            // guard event.modifierFlags.rawValue == 256 else {
-            //     return appState.mode = .normal(
-            //         currentPendingOperation: .none,
-            //         operationCountAsString: nil
-            //     )
-            // }
+            guard
+                event.modifierFlags.rawValue == 256
+                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                        .shift, .capsLock,
+                    ])
+            else {
+                return appState.mode = .normal(
+                    currentPendingOperation: .none,
+                    operationCountAsString: nil
+                )
+            }
             appState.mode = .normal(
                 currentPendingOperation: .goToMarkExactState,
                 operationCountAsString: nil
@@ -927,7 +946,7 @@ extension NeoMouse {
         case "|":
             guard
                 event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                    .shift, .capsLock,
+                    .shift, .capsLock, .option,
                 ])
             else {
                 return appState.mode = .normal(
@@ -1005,16 +1024,32 @@ extension NeoMouse {
             VisualHighlightOverlay.shared.passAppState(state: appState)
             break
         case "v":
+            guard event.modifierFlags.rawValue == 256 else {
+                return appState.mode = .normal(
+                    currentPendingOperation: .none, operationCountAsString: nil)
+            }
             CoreOperations.toggleVisualState(
-                event: event, appState: appState,
+                appState: appState,
                 currentPendingNormalOperation: currentPendingNormalOperation,
                 currentCGPoint: currentCGPoint,
                 visualHighlightOverlay: VisualHighlightOverlay.shared
             )
             break
         case "y", "Y":
+            // Modifier gate hoisted out of normalYank (it now does one thing —
+            // screenshot the visual rect). .registerAction's "y" path is already
+            // guarded, so this only covers the bare normal-mode `y`/`Y`.
+            guard
+                event.modifierFlags.rawValue == 256
+                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                        .shift, .capsLock,
+                    ])
+            else {
+                return appState.mode = .normal(
+                    currentPendingOperation: .none, operationCountAsString: nil)
+            }
             CoreOperations.normalYank(
-                event: event, currentSession: currentSession, appState: appState)
+                currentSession: currentSession, appState: appState)
             break
         case "o":
             guard appState.isVisual,

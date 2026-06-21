@@ -18,14 +18,11 @@ extension NeoMouse {
         ].compactMap { $0 }
 
         @MainActor
-        static func normalYank(event: NSEvent, currentSession: Session, appState: NeoMouseState) {
-            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
-            //As functions should ideally just do one thing
+        static func normalYank(currentSession: Session, appState: NeoMouseState) {
+            // Modifier-flag gating is the caller's responsibility. This does one
+            // thing: screenshot the active visual rect to the clipboard, falling
+            // back to normal mode when there is no selection.
             guard
-                (event.modifierFlags.rawValue == 256
-                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                        .shift, .capsLock,
-                    ])),
                 appState.isVisual,
                 let rect = appState.currentVisualRect
             else {
@@ -75,17 +72,8 @@ extension NeoMouse {
         }
 
         @MainActor
-        static func registerYank(event: NSEvent, currentSession: Session, activeRegister: String) {
-            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
-            //As functions should ideally just do one thing
-            guard
-                (event.modifierFlags.rawValue == 256
-                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                        .shift, .capsLock,
-                    ]))
-            else {
-                return
-            }
+        static func registerYank(currentSession: Session, activeRegister: String) {
+            // Modifier-flag gating is the caller's responsibility.
             guard let sessionId = currentSession.id else {
                 return debug("registerYank - currentSession has no id; was the session persisted?")
             }
@@ -188,17 +176,8 @@ extension NeoMouse {
         }
 
         @MainActor
-        static func delete(event: NSEvent, appState: NeoMouseState, currentSession: Session) {
-            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
-            //As functions should ideally just do one thing
-            guard
-                (event.modifierFlags.rawValue == 256
-                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                        .shift, .capsLock,
-                    ]))
-            else {
-                return
-            }
+        static func delete(appState: NeoMouseState, currentSession: Session) {
+            // Modifier-flag gating is the caller's responsibility.
             System.simulate(.cut)
         }
 
@@ -252,18 +231,9 @@ extension NeoMouse {
 
         @MainActor
         static func pasteFromRegister(
-            event: NSEvent, appState: NeoMouseState, currentSession: Session, activeRegister: String
+            appState: NeoMouseState, currentSession: Session, activeRegister: String
         ) {
-            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
-            //As functions should ideally just do one thing
-            guard
-                (event.modifierFlags.rawValue == 256
-                    || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
-                        .shift, .capsLock,
-                    ]))
-            else {
-                return
-            }
+            // Modifier-flag gating is the caller's responsibility.
             guard let sessionId = currentSession.id else {
                 return debug(
                     "pasteFromRegister - currentSession has no id; was the session persisted?"
@@ -285,15 +255,10 @@ extension NeoMouse {
 
         @MainActor
         static func goToPreviousVisualState(
-            event: NSEvent, appState: NeoMouseState,
+            appState: NeoMouseState,
             currentPendingNormalOperation: NeomouseType.NormalModePendingOperation
         ) {
-            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
-            //As functions should ideally just do one thing
-            guard event.modifierFlags.rawValue == 256 else {
-                debug("goToPreviousVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
-                return
-            }
+            // Modifier-flag gating is the caller's responsibility.
             guard !appState.isVisual else {
                 debug("goToPreviousVisualState: already in visual state, ignoring")
                 return
@@ -338,19 +303,12 @@ extension NeoMouse {
 
         @MainActor
         static func toggleVisualState(
-            event: NSEvent, appState: NeoMouseState,
+            appState: NeoMouseState,
             currentPendingNormalOperation: NeomouseType.NormalModePendingOperation,
             currentCGPoint: CGPoint,
             visualHighlightOverlay: VisualHighlightOverlay
         ) {
-            // appState.operationCountAsString = nil
-            //TODO: consider moving modifier flag check to caller (NeoMouseApp)
-            //As functions should ideally just do one thing
-            guard event.modifierFlags.rawValue == 256 else {
-                debug("toggleVisualState: \(event.modifierFlags.rawValue) doesn't match 256, ignoring")
-                return appState.mode = .normal(currentPendingOperation: .none, operationCountAsString: nil)
-                // return appState.operationCountAsString = nil
-            }
+            // Modifier-flag gating is the caller's responsibility.
             appState.isVisual.toggle()
             guard appState.isVisual else {
                 exitVisualState(

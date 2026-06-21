@@ -49,9 +49,26 @@ extension NeoMouse {
         debug(
             "modifier: \(event.modifierFlags.rawValue), mode:\(appState.mode), keyCode:\(event.keyCode)"
         )
-        guard case .find = appState.mode, event.modifierFlags.rawValue == 256 else {
+        // NOTE: unlike the CoreOperations ops (whose modifier guards were
+        // hoisted to their call sites), this gate is kept HERE by design.
+        // executeFindModeOperation is the find-mode cell-pick's single entry
+        // point and owns its own gate + the mode check; hoisting buys nothing
+        // and would just duplicate it across handleFindMode's two call paths.
+        // Leave it.
+        //
+        // Allow no-modifier (256) as well as Shift / Option / CapsLock — find
+        // labels resolve from the unmodified keyCode, so holding Shift/Option
+        // (or CapsLock being on) shouldn't reject the cell pick. Cmd / Ctrl are
+        // still excluded so system shortcuts pass through.
+        guard
+            case .find = appState.mode,
+            event.modifierFlags.rawValue == 256
+                || event.modifierFlags.intersection(.deviceIndependentFlagsMask).isSubset(of: [
+                    .shift, .option, .capsLock,
+                ])
+        else {
             debug(
-                "Cannot executeFindModeOperation as mode is \(appState.mode) or \(event.modifierFlags.rawValue) != 256"
+                "Cannot executeFindModeOperation: mode is \(appState.mode) or modifiers \(event.modifierFlags.rawValue) include Cmd/Ctrl"
             )
             return
         }
