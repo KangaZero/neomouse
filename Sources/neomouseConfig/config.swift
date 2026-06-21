@@ -205,9 +205,40 @@ extension Config {
             case .fileNotFound(let url):
                 return "Config not found at \(url.path)"
             case .readFailed(let url, let underlying):
-                return "Failed to read config at \(url.path): \(underlying)"
+                return "Failed to read config at \(url.path): \(underlying.localizedDescription)"
             case .decodeFailed(let url, let underlying):
-                return "Failed to decode TOML at \(url.path): \(underlying)"
+                return "Invalid TOML in \(url.path): \(Self.describe(underlying))"
+            }
+        }
+
+        /// Unwrap a `DecodingError` into a single, human-readable line. A raw
+        /// TOML *parse* failure carries the real line/column in the context's
+        /// `underlyingError` (e.g. "(Line 148) Ill-formed key."); our own
+        /// strict-validation failures put the friendly message in
+        /// `debugDescription` (e.g. "keymaps.h cannot be bound to a digit key …").
+        /// Either way we surface that, plus the key path when present — instead
+        /// of the noisy "DecodingError.dataCorrupted: Data was corrupted. Debug
+        /// description: …. Underlying error: …" dump.
+        private static func describe(_ error: Error) -> String {
+            guard let decoding = error as? DecodingError else {
+                return "\(error)"
+            }
+            func keyPath(_ ctx: DecodingError.Context) -> String {
+                ctx.codingPath.isEmpty
+                    ? "" : " (at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")))"
+            }
+            switch decoding {
+            case .dataCorrupted(let ctx):
+                let detail = ctx.underlyingError.map { "\($0)" } ?? ctx.debugDescription
+                return detail + keyPath(ctx)
+            case .keyNotFound(let key, let ctx):
+                return "missing required key \"\(key.stringValue)\"" + keyPath(ctx)
+            case .typeMismatch(_, let ctx):
+                return ctx.debugDescription + keyPath(ctx)
+            case .valueNotFound(_, let ctx):
+                return ctx.debugDescription + keyPath(ctx)
+            @unknown default:
+                return "\(error)"
             }
         }
     }

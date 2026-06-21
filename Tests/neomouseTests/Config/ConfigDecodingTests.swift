@@ -134,6 +134,22 @@ struct ConfigDecodingTests {
         }
     }
 
+    @Test("a malformed-TOML load error reads cleanly (no raw DecodingError dump)")
+    func malformedTomlErrorIsReadable() {
+        do {
+            _ = try Config.loadConfig(from: tomlURL(Self.base + "\nthis is not valid toml\n"))
+            Issue.record("expected a decode failure")
+        } catch let error as Config.LoadError {
+            let message = "\(error)"
+            #expect(message.hasPrefix("Invalid TOML in"))
+            // None of the noisy raw-DecodingError wrapping should leak through.
+            #expect(!message.contains("DecodingError"))
+            #expect(!message.contains("Debug description"))
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+    }
+
     @Test("the shipped settings.toml decodes; its [keymaps] is the identity default")
     func shippedSettingsTomlDecodes() throws {
         // Path relative to this source file → cwd-independent.
