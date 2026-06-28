@@ -4,6 +4,12 @@ import SwiftUI
 import neomouseConfig
 import neomouseUtils
 
+enum ToastType {
+    case info;
+    case error;
+    case warning;
+}
+
 @MainActor
 final class ToastManager {
     static let shared = ToastManager()
@@ -13,7 +19,10 @@ final class ToastManager {
         window.map { CGWindowID($0.windowNumber) }
     }
 
-    func show(_ message: String) {
+    /// Trigger the ToastManager UI with the following params:
+    /// message: String ( Message to show )
+    /// type: ToastType<.info | .error | .warning> [optional] ( Determines SF symbol to show, defaults to .info)
+    func show(_ message: String, _ type: ToastType = ToastType.info) {
 
         guard
             let currentScreen =
@@ -28,6 +37,16 @@ final class ToastManager {
         // it directly here. Falls back to defaults if state isn't built yet.
         let theme = NeoMouse.sharedState.theme.toast
         let panelSize = CGSize(width: theme.width, height: theme.height)
+        // See https://github.com/andrewtavis/sf-symbols-online for other SF symbols
+        let systemName: String =
+            switch type {
+            case .info:
+                "bell.fill"
+            case .error:
+                "xmark.shield.fill"
+            case .warning:
+                "exclamationmark.triangle.fill"
+            }
 
         let panel = NSPanel(
             contentRect: CGRect(origin: .zero, size: panelSize),
@@ -40,7 +59,7 @@ final class ToastManager {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.contentView = NSHostingView(rootView: ToastView(message: message, theme: theme))
+        panel.contentView = NSHostingView(rootView: ToastView(message: message, systemName: systemName, theme: theme))
 
         let origin = theme.anchor.origin(
             in: currentScreen.visibleFrame,
@@ -67,10 +86,11 @@ final class ToastManager {
 
 struct ToastView: View {
     let message: String
+    let systemName: String
     let theme: ToastTheme
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "bell.fill")
+            Image(systemName: systemName)
                 .foregroundColor(theme.textColor.swiftUI)
             Text(message)
                 .foregroundColor(theme.textColor.swiftUI)

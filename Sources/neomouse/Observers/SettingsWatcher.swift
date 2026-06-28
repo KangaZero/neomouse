@@ -130,7 +130,7 @@ extension NeoMouse {
                     ToastManager.shared.show("Reloaded settings.toml")
                 case .failure(let error):
                     debug("SettingsWatcher: reload failed — \(error)")
-                    ToastManager.shared.show("Reload failed: \(error)")
+                    ToastManager.shared.show("Reload failed: \(error)", ToastType.error)
                 }
             }
         }
