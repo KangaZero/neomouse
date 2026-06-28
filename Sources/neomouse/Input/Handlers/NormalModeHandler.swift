@@ -31,8 +31,13 @@ extension NeoMouse {
         let currentDisplayBounds = ctx.currentDisplayBounds
         let currentScreenSize = ctx.currentScreenSize
         let operationCount = ctx.operationCount
-        let asciiKey = ctx.asciiKey
-        let asciiKeyBase = ctx.asciiKeyBase
+        // Use the keymap-resolved canonical chars so every `case "h":` below
+        // matches whatever physical key the user bound to "h". Identity under
+        // the default keymap, so the cases are unchanged. nil (a non-printable
+        // key, or a key whose action was remapped away) matches no case — we
+        // must NOT fall back to the raw key, or a freed key would still fire.
+        let asciiKey = ctx.canonicalAsciiKey
+        let asciiKeyBase = ctx.canonicalAsciiKeyBase
         switch event.keyCode {
         case charToKeyCodeMap["Esc"]:
             guard event.modifierFlags.rawValue == 256 else {

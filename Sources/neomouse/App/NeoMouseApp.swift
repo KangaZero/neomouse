@@ -47,9 +47,31 @@ struct NeoMouse: App {
             return NeoMouseState(config: config)
         } catch {
             debug("Config load failed (\(error)); falling back to built-in defaults")
+            // Stash the failure so we can toast it once the overlay UI is up
+            // (no UI exists this early). Surfaced by
+            // notifyStartupConfigErrorIfNeeded() at the end of launch setup.
+            startupConfigError = "\(error)"
             return NeoMouseState()
         }
     }()
+
+    /// A settings.toml load/decode failure captured during `sharedState` init,
+    /// pending a user-facing toast once the UI is ready. nil = clean load (or a
+    /// first run with no config file yet, which is not an error).
+    static var startupConfigError: String?
+
+    /// Toast the startup config error (if any) so a broken settings.toml is
+    /// visible at launch — not just buried in the debug log. The hot-reload
+    /// path already toasts on failure; this closes the startup gap. Deferred one
+    /// runloop tick so the toast overlay exists by the time we show it.
+    @MainActor
+    static func notifyStartupConfigErrorIfNeeded() {
+        guard let message = startupConfigError else { return }
+        startupConfigError = nil
+        DispatchQueue.main.async {
+            ToastManager.shared.show("settings.toml error — using defaults: \(message)")
+        }
+    }
 
     /// Copy the bundled default `settings.toml` (shipped in the .app at
     /// `Contents/Resources/settings.toml`) to `~/.config/neomouse/settings.toml`
@@ -156,6 +178,7 @@ struct NeoMouse: App {
         NeoMouse.installVisualModeObserver(appState: appState)
         NeoMouse.installPasteboardModeObserver(appState: appState)
         NeoMouse.installSettingsReloadObserver(appState: appState)
+        NeoMouse.notifyStartupConfigErrorIfNeeded()
     }
 
     var body: some Scene {

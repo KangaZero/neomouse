@@ -98,4 +98,69 @@ struct ConfigDecodingTests {
                 from: tomlURL(Self.base + "\n[theme.numbers_overlay]\ndirection = \"leftt\"\n"))
         }
     }
+
+    @Test("[keymaps] decodes overrides + toggle_activation")
+    func keymapsDecode() throws {
+        let c = try Config.loadConfig(
+            from: tomlURL(Self.base + "\n[keymaps]\ntoggle_activation = \"q\"\nj = \"n\"\n"))
+        #expect(c.keymaps?.toggleActivation == "q")
+        #expect(c.keymaps?.overrides["j"] == "n")
+        #expect(c.keymaps?.canonical(forPhysical: "n") == "j")
+    }
+
+    @Test("absent [keymaps] decodes as nil")
+    func keymapsAbsent() throws {
+        #expect(try Config.loadConfig(from: tomlURL(Self.base)).keymaps == nil)
+    }
+
+    @Test("unknown keymaps entry is rejected")
+    func keymapsUnknownKey() {
+        #expect(throws: Config.LoadError.self) {
+            try Config.loadConfig(from: tomlURL(Self.base + "\n[keymaps]\nnope = \"x\"\n"))
+        }
+    }
+
+    @Test("multi-char keymaps value is rejected")
+    func keymapsMultiChar() {
+        #expect(throws: Config.LoadError.self) {
+            try Config.loadConfig(from: tomlURL(Self.base + "\n[keymaps]\nj = \"nn\"\n"))
+        }
+    }
+
+    @Test("binding an action onto a digit key is rejected")
+    func keymapsDigitTarget() {
+        #expect(throws: Config.LoadError.self) {
+            try Config.loadConfig(from: tomlURL(Self.base + "\n[keymaps]\nh = \"5\"\n"))
+        }
+    }
+
+    @Test("a malformed-TOML load error reads cleanly (no raw DecodingError dump)")
+    func malformedTomlErrorIsReadable() {
+        do {
+            _ = try Config.loadConfig(from: tomlURL(Self.base + "\nthis is not valid toml\n"))
+            Issue.record("expected a decode failure")
+        } catch let error as Config.LoadError {
+            let message = "\(error)"
+            #expect(message.hasPrefix("Invalid TOML in"))
+            // None of the noisy raw-DecodingError wrapping should leak through.
+            #expect(!message.contains("DecodingError"))
+            #expect(!message.contains("Debug description"))
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+    }
+
+    @Test("the shipped settings.toml decodes; its [keymaps] is the identity default")
+    func shippedSettingsTomlDecodes() throws {
+        // Path relative to this source file → cwd-independent.
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // Config
+            .deletingLastPathComponent()  // neomouseTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
+        let c = try Config.loadConfig(from: root.appendingPathComponent("settings.toml"))
+        #expect(c.keymaps?.toggleActivation == "e")
+        // Every shipped binding is at its default → no overrides stored.
+        #expect(c.keymaps?.overrides.isEmpty == true)
+    }
 }

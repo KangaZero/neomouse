@@ -34,9 +34,21 @@
 		},
 		"theme": {
 			"$ref": "#/$defs/theme"
+		},
+		"keymaps": {
+			"$ref": "#/$defs/keymaps"
 		}
 	},
 	"$defs": {
+		"keymaps": {
+			"type": "object",
+			"description": "Remappable Vim keybindings, keyed by the canonical Vim character (value = the physical key to press). Letters + symbols are remappable; digits and special keys are fixed. Unknown keys are rejected at load time by the decoder.",
+			"additionalProperties": {
+				"type": "string",
+				"minLength": 1,
+				"maxLength": 1
+			}
+		},
 		"grid": {
 			"type": "object",
 			"description": "Find-mode grid geometry and labels.",

@@ -275,7 +275,7 @@ final class CommandLine {
         }
         //IMPORTANT: case insensitive just like vim
         guard let commandToExecute = Config.Command(rawValue: command.localizedLowercase) else {
-            ToastManager.shared.show("not a valid command: \(command)")
+            ToastManager.shared.show("not a valid command: \(command)", ToastType.error)
             return debug("executeCommand called with invalid command string: \(command)")
         }
         commandExecutionHandler(command: commandToExecute)
